@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ParticleBackground } from '../components/ParticleBackground';
 import { api } from '../utils/api';
@@ -84,11 +84,10 @@ export const SessionPage: React.FC = () => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [currentAcknowledgment, setCurrentAcknowledgment] = useState<string>('');
   const [weakDomains, setWeakDomains] = useState<string[]>([]);
-  const [isSpeaking, setIsSpeaking] = useState(false);
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [aiState, setAiState] = useState<'idle' | 'speaking' | 'listening' | 'evaluating'>('idle');
 
@@ -407,10 +406,8 @@ export const SessionPage: React.FC = () => {
     if (!('speechSynthesis' in window)) { startListeningAfterSpeech(); return; }
     window.speechSynthesis.cancel();
     setAiState('speaking');
-    setIsSpeaking(true);
     const speakQuestion = () => {
       speakUtterance(questionText, 1.0, () => {
-        setIsSpeaking(false);
         startListeningAfterSpeech();
       });
     };
@@ -663,23 +660,6 @@ export const SessionPage: React.FC = () => {
     submitAnswer(responseText);
   };
 
-  const handleMuteToggle = () => {
-    const nextMuted = !isMuted;
-    setIsMuted(nextMuted);
-    if (nextMuted) {
-      isListeningRef.current = false;
-      recognitionRef.current?.stop();
-      setAiState('idle');
-      setIsListening(false);
-    } else if (sessionStarted) {
-      try {
-        isListeningRef.current = true;
-        recognitionRef.current?.start();
-        setAiState('listening');
-        setIsListening(true);
-      } catch {}
-    }
-  };
 
   const proctoringStatusColor = {
     ok: 'text-emerald-400',
@@ -1223,7 +1203,7 @@ export const SessionPage: React.FC = () => {
             {faceDetectionStatus === 'no_face' ? 'PROCTORING: No face detected!' :
               faceDetectionStatus === 'multiple_faces' ? 'PROCTORING: Multiple faces detected!' :
                 faceDetectionStatus === 'looking_away' ? 'PROCTORING: Look at the screen!' :
-                  faceDetectionStatus === 'movement' ? `PROCTORING: Excessive movement! (${movementWarnings}/${MAX_MOVEMENT_WARNINGS})` :
+                  faceDetectionStatus === 'movement' ? `PROCTORING: Excessive movement! (${movementWarnings}/${maxMovementWarnings})` :
                     'PROCTORING: Behavior deviation!'}
           </span>
         </div>

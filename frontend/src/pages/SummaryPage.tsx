@@ -744,7 +744,7 @@ export const SummaryPage: React.FC = () => {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {weakList.map(domainName => {
+                        {weakList.map((domainName: string) => {
                           const details = DOMAIN_DETAILS[domainName] || {
                             icon: 'school',
                             desc: `Technical concepts and best practices related to ${domainName}.`,
