@@ -54,9 +54,11 @@ export const SessionPage: React.FC = () => {
   const [proctoringWarnings, setProctoringWarnings] = useState<string[]>([]);
   const [faceDetectionStatus, setFaceDetectionStatus] = useState<'initializing' | 'ok' | 'no_face' | 'multiple_faces' | 'looking_away' | 'movement' | 'disabled'>('disabled');
   const [maxViolations, setMaxViolations] = useState(DEFAULT_MAX_WARNINGS);
-  const [violationCount, setViolationCount] = useState(0);  // unified: tab switch + look away + body movement
+  const [warningCount, setWarningCount] = useState(0);
+  const [violationCount, setViolationCount] = useState(0);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [showProctoringPanel, setShowProctoringPanel] = useState(true);
+  const [adaptiveMode, setAdaptiveMode] = useState(false);
   const [micPermissionError, setMicPermissionError] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -65,7 +67,7 @@ export const SessionPage: React.FC = () => {
   const modelRef = useRef<any>(null);
   const detectionIntervalRef = useRef<any>(null);
   const prevFrameRef = useRef<ImageData | null>(null);
-  const movementWarningsRef = useRef(0);
+  const violationCountRef = useRef(0);
   // Debounce: require N consecutive motion frames before flagging
   const consecutiveMotionRef = useRef(0);
   // Cooldown: minimum ms between two movement-warning events
@@ -74,7 +76,6 @@ export const SessionPage: React.FC = () => {
   const webcamStreamRef = useRef<MediaStream | null>(null);
   // Throttle: only run pixel-diff motion check every 500ms (not every detection tick)
   const lastMotionCheckRef = useRef<number>(0);
-  const violationCountRef = useRef(0);  // unified counter ref
 
   // ── Interview State ───────────────────────────────────────────────────────
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
@@ -88,7 +89,6 @@ export const SessionPage: React.FC = () => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [currentAcknowledgment, setCurrentAcknowledgment] = useState<string>('');
   const [weakDomains, setWeakDomains] = useState<string[]>([]);
-  const [adaptiveMode, setAdaptiveMode] = useState(false);
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -119,7 +119,7 @@ export const SessionPage: React.FC = () => {
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
   useEffect(() => { currentQuestionRef.current = currentQuestion; }, [currentQuestion]);
   useEffect(() => { aiStateRef.current = aiState; }, [aiState]);
-  useEffect(() => { movementWarningsRef.current = violationCount; }, [violationCount]);
+  useEffect(() => { violationCountRef.current = violationCount; }, [violationCount]);
   useEffect(() => { maxViolationsRef.current = maxViolations; }, [maxViolations]);
 
   // ── Save Proctoring Data ───────────────────────────────────────────────────
@@ -128,8 +128,8 @@ export const SessionPage: React.FC = () => {
       localStorage.setItem(`proctoring_session_${sid}`, JSON.stringify({
         enabled: true,
         warnings: proctoringWarnings,
-        warningCount: violationCount,
-        movementWarnings: violationCount,
+        warningCount: warningCount,
+        violationCount: violationCount,
         logs: proctoringLogs,
       }));
     }
@@ -141,36 +141,37 @@ export const SessionPage: React.FC = () => {
   useEffect(() => {
     if (!sessionStarted || !isProctoringEnabled) return;
 
-    const addViolation = (reason: string) => {
+    const handleViolation = (reason: string) => {
       const now = Date.now();
-      if (now - lastFocusLossRef.current < 5000) return; // deduplicate within 5s
+      if (now - lastFocusLossRef.current < 5000) return; // Limit to once every 5 seconds
       lastFocusLossRef.current = now;
 
       const timestamp = new Date().toLocaleTimeString();
-      setProctoringLogs(prev => [...prev, { timestamp, event: reason }]);
-      setProctoringWarnings(prev => [...prev, `[${timestamp}] Violation: ${reason}.`]);
       setViolationCount(c => {
         const next = c + 1;
         violationCountRef.current = next;
+        setProctoringLogs(prev => [...prev, { timestamp, event: reason }]);
+        setProctoringWarnings(prev => [...prev, `[${timestamp}] Violation: ${reason}.`]);
         if (next >= maxViolationsRef.current) {
           setTimeout(() => {
-            alert(`🚫 Interview Terminated: ${maxViolationsRef.current} proctoring violations reached. Session ended.`);
+            alert(`🚫 Interview Terminated: ${maxViolationsRef.current} proctoring violations reached.`);
             handleForceEndSession();
           }, 500);
+        } else {
+          alert(`⚠️ Proctoring Warning: ${reason} is prohibited! (${next}/${maxViolationsRef.current} violations)`);
         }
         return next;
       });
-      alert(`⚠️ Proctoring Violation: ${reason} is not allowed during the interview!`);
     };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        addViolation('Tab switched / browser minimized');
+        handleViolation('Tab switched / browser minimized');
       }
     };
 
     const handleBlur = () => {
-      addViolation('Window lost focus / clicked outside');
+      handleViolation('Window lost focus / clicked outside');
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -253,7 +254,34 @@ export const SessionPage: React.FC = () => {
 
     const detectFacesAndMotion = async () => {
       const video = videoRef.current;
-                  // ── Motion detection via pixel diff (throttled + debounced + cooldown) ──
+      const canvas = canvasRef.current;
+      const motionCanvas = motionCanvasRef.current;
+      const model = modelRef.current;
+      if (!video || !canvas || !model) return;
+      if (video.readyState !== 4) return;
+
+      if (canvas.width !== video.videoWidth) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Draw current frame for motion analysis
+      if (motionCanvas) {
+        const nowMs = Date.now();
+        const MOTION_THROTTLE_MS = 500; // Only diff frames every 500ms
+        const shouldCheckMotion = nowMs - lastMotionCheckRef.current >= MOTION_THROTTLE_MS;
+
+        motionCanvas.width = video.videoWidth;
+        motionCanvas.height = video.videoHeight;
+        const mctx = motionCanvas.getContext('2d');
+        if (mctx) {
+          mctx.drawImage(video, 0, 0);
+          const currentFrame = mctx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
+
+          // ── Motion detection via pixel diff (throttled + debounced + cooldown) ──
           if (shouldCheckMotion && prevFrameRef.current && prevFrameRef.current.data.length === currentFrame.data.length) {
             lastMotionCheckRef.current = nowMs;
             let diffCount = 0;
@@ -275,7 +303,7 @@ export const SessionPage: React.FC = () => {
               consecutiveMotionRef.current = 0; // reset streak on calm frame
             }
 
-            // Only raise a violation after 4 consecutive motion frames AND cooldown elapsed
+            // Only raise a warning after 4 consecutive motion frames AND cooldown elapsed
             const COOLDOWN_MS = 20_000; // 20 s between warnings
             const REQUIRED_CONSECUTIVE = 4;
             const now = Date.now();
@@ -290,30 +318,11 @@ export const SessionPage: React.FC = () => {
               setViolationCount(c => {
                 const next = c + 1;
                 violationCountRef.current = next;
-                movementWarningsRef.current = next;
                 setProctoringLogs(prev => [...prev, { timestamp, event: `Excessive movement detected (ratio: ${(motionRatio * 100).toFixed(1)}%)` }]);
                 setProctoringWarnings(prev => [...prev, `[${timestamp}] Violation: Excessive body movement.`]);
                 if (next >= maxViolationsRef.current) {
                   setTimeout(() => {
-                    alert(`🚫 Interview Terminated: ${maxViolationsRef.current} proctoring violations reached. Session ended.`);
-                    handleForceEndSession();
-                  }, 500);
-                }
-                return next;
-              });
-            }
-          }astWarningTimeRef.current = now;
-              const timestamp = new Date().toLocaleTimeString();
-              setFaceDetectionStatus('movement');
-              setMovementWarnings(c => {
-                const next = c + 1;
-                movementWarningsRef.current = next;
-                setProctoringLogs(prev => [...prev, { timestamp, event: `Excessive movement detected (ratio: ${(motionRatio * 100).toFixed(1)}%)` }]);
-                setProctoringWarnings(prev => [...prev, `[${timestamp}] Warning: Excessive body movement.`]);
-                setWarningCount(w => w + 1);
-                if (next >= maxMovementWarningsRef.current) {
-                  setTimeout(() => {
-                    alert(`🚫 Interview Terminated: ${maxMovementWarningsRef.current} excessive movement warnings reached. Your session has been flagged and ended.`);
+                    alert(`🚫 Interview Terminated: ${maxViolationsRef.current} proctoring violations reached.`);
                     handleForceEndSession();
                   }, 500);
                 }
@@ -377,8 +386,6 @@ export const SessionPage: React.FC = () => {
             const nose = face.landmarks[2];
             let isCurrentlyLookingAway = false;
 
-            const LOOK_AWAY_THRESHOLD_MS = 5000; // 5 seconds sustained look-away
-
             if (rightEye && leftEye && nose) {
               const eyeDistance = leftEye[0] - rightEye[0];
               if (eyeDistance > 0) {
@@ -397,10 +404,9 @@ export const SessionPage: React.FC = () => {
                   } else if (
                     !hasIncrementedLookAwayRef.current &&
                     lookAwayStartTimeRef.current &&
-                    now - lookAwayStartTimeRef.current >= LOOK_AWAY_THRESHOLD_MS
+                    now - lookAwayStartTimeRef.current >= 5000 // 5 seconds sustained look-away
                   ) {
                     hasIncrementedLookAwayRef.current = true;
-                    const timestamp = new Date().toLocaleTimeString();
                     setViolationCount(c => {
                       const next = c + 1;
                       violationCountRef.current = next;
@@ -507,23 +513,8 @@ export const SessionPage: React.FC = () => {
   const startListening = () => {
     if (isListeningRef.current) return;
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      alert('Voice recognition is not supported in this browser. Please use Google Chrome for voice features.');
-      return;
-    }
+    if (!SR) return;
     
-    // Check if we already have microphone permission before starting
-    if (navigator.permissions) {
-      navigator.permissions.query({ name: 'microphone' as PermissionName }).then(result => {
-        if (result.state === 'denied') {
-          setMicPermissionError(true);
-          setIsListening(false);
-          return;
-        }
-        setMicPermissionError(false);
-      }).catch(() => {/* permissions API not available, proceed anyway */});
-    }
-
     isListeningRef.current = true;
     setIsListening(true);
     stableTextRef.current = responseTextRef.current;
@@ -565,11 +556,6 @@ export const SessionPage: React.FC = () => {
         setAiState('idle');
         return;
       }
-      if (event.error === 'no-speech') {
-        // No-speech is normal — just restart silently
-        if (isListeningRef.current) setTimeout(startListening, 300);
-        return;
-      }
       // Auto-restart after a brief delay if we are still supposed to be listening
       if (isListeningRef.current) {
         setTimeout(startListening, 300);
@@ -591,8 +577,7 @@ export const SessionPage: React.FC = () => {
       rec.start();
     } catch (e) {
       console.error('Failed to start speech recognition:', e);
-      isListeningRef.current = false;
-      setIsListening(false);
+      setMicPermissionError(true);
     }
   };
 
@@ -621,7 +606,6 @@ export const SessionPage: React.FC = () => {
     if (isListening) {
       stopListening();
     } else {
-      setMicPermissionError(false);
       startListening();
     }
   };
@@ -823,17 +807,6 @@ export const SessionPage: React.FC = () => {
     disabled: '🔇 Inactive',
   }[faceDetectionStatus] || 'Inactive';
 
-  const difficultyChipStyle = (diff: string) => {
-    if (diff === 'hard') return 'bg-red-500/10 text-red-400 border-red-500/30';
-    if (diff === 'easy') return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-    return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
-  };
-  const difficultyLabel = (diff: string) => {
-    if (diff === 'hard') return '🔴 Hard';
-    if (diff === 'easy') return '🟢 Easy';
-    return '🟡 Medium';
-  };
-
   return (
     <div className={`${isDark ? 'theme-joy-dark bg-background text-on-surface' : 'theme-joy bg-background text-on-surface'} min-h-screen transition-colors duration-300 relative overflow-x-hidden font-body`}>
       <ParticleBackground theme="joy" />
@@ -949,10 +922,10 @@ export const SessionPage: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-bold text-on-surface-variant flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-amber-400 text-xs">crisis_alert</span>
-                        Max movement warnings before auto-fail
+                        Max violations before auto-fail
                       </label>
                       <span className="text-xs font-black text-primary bg-primary/10 px-3 py-0.5 rounded-full border border-primary/20">
-                        {maxMovementWarnings}
+                        {maxViolations}
                       </span>
                     </div>
                     <input
@@ -960,8 +933,8 @@ export const SessionPage: React.FC = () => {
                       min={1}
                       max={20}
                       step={1}
-                      value={maxMovementWarnings}
-                      onChange={e => setMaxMovementWarnings(Number(e.target.value))}
+                      value={maxViolations}
+                      onChange={e => setMaxViolations(Number(e.target.value))}
                       className="w-full accent-primary h-2 rounded-full cursor-pointer"
                     />
                     <div className="flex justify-between text-[9px] text-on-surface-variant font-semibold">
@@ -987,7 +960,7 @@ export const SessionPage: React.FC = () => {
                 <input type="checkbox" checked={adaptiveMode} onChange={e => setAdaptiveMode(e.target.checked)} className="w-5 h-5 rounded text-primary focus:ring-primary cursor-pointer" />
               </div>
 
-              {/* Voice Mode Toggle */}}
+              {/* Voice Mode Toggle */}
               <div className="flex items-center justify-between p-4 bg-surface-container/40 border border-outline-variant rounded-2xl">
                 <div className="flex flex-col gap-0.5 text-left">
                   <span className="text-xs font-bold text-on-surface flex items-center gap-1.5">
@@ -1028,10 +1001,9 @@ export const SessionPage: React.FC = () => {
                   <span className={`text-xs font-bold px-3 py-1 rounded-full bg-black/70 backdrop-blur-sm ${proctoringStatusColor}`}>
                     {proctoringStatusText}
                   </span>
-                {/* Proctoring violations counter */}
-                <span className={`text-xs font-bold px-3 py-1 rounded-full bg-black/70 backdrop-blur-sm ${violationCount >= maxViolations - 1 ? 'text-red-400 animate-pulse' : 'text-white'}`}>
-                  ⚠️ {violationCount}/{maxViolations}
-                </span>
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full bg-black/70 backdrop-blur-sm ${violationCount >= maxViolations - 1 ? 'text-red-400 animate-pulse' : 'text-white'}`}>
+                    ⚠️ {violationCount}/{maxViolations}
+                  </span>
                 </div>
 
                 {/* Warning overlay when movement detected */}
@@ -1042,7 +1014,7 @@ export const SessionPage: React.FC = () => {
                   <div className="absolute inset-0 border-4 border-red-500 animate-pulse rounded pointer-events-none" />
                 )}
 
-                {/* Proctoring Violations bar */}
+                {/* Warning count bar */}
                 <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] text-gray-400 font-bold">Proctoring Violations</span>
@@ -1129,15 +1101,15 @@ export const SessionPage: React.FC = () => {
                 {currentAcknowledgment && (
                   <p className="text-sm text-secondary italic mb-3 leading-relaxed border-l-4 border-secondary/30 pl-3">{currentAcknowledgment}</p>
                 )}
-                {/* Difficulty chip */}
-                {currentQuestion?.difficulty && adaptiveMode && (
-                  <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full border mb-2 ${difficultyChipStyle(currentQuestion.difficulty)}`}>
-                    {difficultyLabel(currentQuestion.difficulty)}
-                  </span>
-                )}
-                {!adaptiveMode && currentQuestion?.difficulty && (
-                  <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full border mb-2 ${difficultyChipStyle(currentQuestion.difficulty)}`}>
-                    {difficultyLabel(currentQuestion.difficulty)}
+                {currentQuestion?.difficulty && (
+                  <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full border mb-2 uppercase ${
+                    currentQuestion.difficulty === 'easy'
+                      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                      : currentQuestion.difficulty === 'hard'
+                        ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                        : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                  }`}>
+                    {currentQuestion.difficulty}
                   </span>
                 )}
                 <h2 className="text-xl font-bold leading-tight text-on-surface relative z-10">
@@ -1167,7 +1139,7 @@ export const SessionPage: React.FC = () => {
                       </span>
                     </button>
                     {micPermissionError && (
-                      <span className="text-[10px] text-red-400 font-semibold">Mic blocked — allow in browser</span>
+                      <span className="text-[10px] text-red-400 font-semibold animate-pulse">Mic blocked — allow in browser</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -1401,7 +1373,7 @@ export const SessionPage: React.FC = () => {
             {faceDetectionStatus === 'no_face' ? 'PROCTORING: No face detected!' :
               faceDetectionStatus === 'multiple_faces' ? 'PROCTORING: Multiple faces detected!' :
                 faceDetectionStatus === 'looking_away' ? 'PROCTORING: Look at the screen!' :
-                  faceDetectionStatus === 'movement' ? `PROCTORING: Excessive movement! (${movementWarnings}/${maxMovementWarnings})` :
+                  faceDetectionStatus === 'movement' ? `PROCTORING: Excessive movement! (${violationCount}/${maxViolations})` :
                     'PROCTORING: Behavior deviation!'}
           </span>
         </div>
