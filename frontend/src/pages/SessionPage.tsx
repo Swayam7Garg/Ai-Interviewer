@@ -481,16 +481,12 @@ export const SessionPage: React.FC = () => {
   };
 
   const startListeningAfterSpeech = () => {
-    setAiState('listening');
-    setIsListening(true);
-    isListeningRef.current = true;
-    if (isVoiceActiveRef.current && !isMutedRef.current && recognitionRef.current) {
-      try {
-        if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
-        recognitionRef.current.start();
-      } catch (e) {
-        console.error('Error starting recognition:', e);
-      }
+    if (isVoiceActiveRef.current && !isMutedRef.current) {
+      startListening();
+    } else {
+      setAiState('idle');
+      setIsListening(false);
+      isListeningRef.current = false;
     }
   };
 
