@@ -1,162 +1,76 @@
 # TechPrep AI — The Ultimate AI Interview Practice Platform
 
-TechPrep AI is a full-stack, production-ready interview practice platform designed to help computer science students and software engineers prepare for technical and behavioral job interviews. The application generates customized questions based on user roles, scores answers across 6 unique dimensions, streams real-time coaching feedback using Server-Sent Events (SSE), and generates beautiful downloadable PDF reports.
+## 1. Introduction and Background
+TechPrep AI is a full-stack, production-ready interview practice platform designed to help computer science students and software engineers prepare for technical and behavioral job interviews. With the rising competitiveness in the tech industry, candidates often lack realistic, highly-structured interview practice. Traditional mock interviews are difficult to schedule, and generic AI chatbots do not offer the rigorous, domain-specific deep dives required to ace top-tier technical interviews.
 
-## 🚀 Key Features
+To address this gap, TechPrep AI serves as an automated, highly knowledgeable AI Interviewer. The platform generates customized questions based on user roles and specific domains, scores answers across 6 unique dimensions, streams real-time coaching feedback using Server-Sent Events (SSE), and provides granular technical corrections just like a real human interviewer.
 
-*   **Custom AI Question Generator**: Generates customized technical, behavioral, or resume-based interview questions based on the candidate's target role (e.g., Backend SDE, Machine Learning Engineer) and experience level.
-*   **6-Dimensional Rubric Scorer**: Grades answers instantly on STAR Structure, Technical Depth, Communication, Relevance, Confidence, and Conciseness.
-*   **Interactive Voice & Chat Coach**: Supports fully interactive voice-mode where the AI coach speaks to you using Web Speech Synthesis and listens to your responses.
-*   **SSE Streaming Feedback**: Streams supportive verbal evaluations and gaps identification character-by-character as you complete each question.
-*   **Async PDF Reports Generator**: Listens to message queues, draws polar/bar charts, constructs multi-page performance reports using Python ReportLab, and uploads them to S3.
-*   **Preparation Dashboard**: Focus training area recommendations based on weakest dimensions, streak tracking, recent sessions table, and Recharts performance trends.
-*   **OAuth Authentication**: Frictionless login using Google and GitHub.
+## 2. Requirements and Project Planning
+The project was planned with a focus on realism, low-latency interaction, and actionable feedback. The core requirements were:
+*   **Role and Domain Customization:** The ability to target specific roles (e.g., Backend SDE, Machine Learning Engineer) and lock into specific domains (e.g., Database Design, Algorithms) to mimic the structured rounds of companies like HackerRank or FAANG.
+*   **Realistic Feedback Loop:** The AI must not only evaluate answers but also provide real-time, spoken-style verbal corrections, identify factual errors, highlight missed key concepts, and provide an ideal answer outline.
+*   **Interactive Voice & Chat Coaching:** Support for fully interactive voice-mode where the AI coach speaks to the user using Web Speech Synthesis and listens to responses.
+*   **Comprehensive Evaluation:** Grading answers instantly on STAR Structure, Technical Depth, Communication, Relevance, Confidence, and Conciseness.
+*   **Performance Tracking:** A dashboard to visualize streaks, previous sessions, and performance trends over time using asynchronous PDF reports.
 
-## 🛠️ Tech Stack
+## 3. System Design and Architecture
+TechPrep AI utilizes a modern, decoupled microservices architecture to ensure scalability and responsiveness during real-time interactions.
 
-### Frontend
-*   **Framework**: React 18 with TypeScript and Vite
-*   **Styling**: Tailwind CSS v4, Material Symbols
-*   **State Management**: Zustand
-*   **Data Fetching**: TanStack Query v5
-*   **Data Visualization**: Recharts
+### Component Architecture
+*   **Frontend (`frontend`):** A React/Vite Single Page Application handling real-time state management, audio synthesis, and SSE streaming. Uses Zustand for state, TanStack Query for data fetching, and Recharts for data visualization.
+*   **Backend API (`backend`):** A Fastify Node.js Primary gateway for user authentication, session management, and database operations. It securely handles OAuth and stores interview records.
+*   **AI Service (`ai`):** A dedicated Python FastAPI microservice that interfaces directly with Google's Gemini 1.5 Pro and Groq API. It manages complex prompt engineering, JSON-enforced schema generation, and asynchronous tasks like PDF report generation via ReportLab and Matplotlib.
+*   **Database & Queues:** PostgreSQL serves as the primary relational database (managed via pg client), while Redis manages caching and background job queues.
 
-### Backend API (Node.js)
-*   **Framework**: Fastify 4 (Node.js 20 LTS)
-*   **Database**: PostgreSQL 16
-*   **ORM**: Prisma
-*   **Authentication**: Custom JWT with `@fastify/jwt` and `@fastify/cookie`, Google/GitHub OAuth
-*   **Caching & Queues**: Redis 7, `ioredis`
-*   **File Storage**: AWS S3 via `@aws-sdk/client-s3`
-
-### AI Service (Python)
-*   **Framework**: FastAPI (Python 3.12)
-*   **LLM Integration**: Google Generative AI (Gemini 1.5 Pro)
-*   **PDF Generation**: ReportLab, Matplotlib, pandas
-*   **Queue Consumer**: Background Worker pulling jobs from Redis
-
-## 📂 Project Structure
-
+### Project Structure
 ```text
 techprep-ai/
-├── apps/
-│   ├── api/                  # Fastify Node.js API backend (Port 3000)
-│   ├── ai-service/           # FastAPI Python AI Service & Workers (Port 8000)
-│   └── frontend/             # React Vite TS Frontend SPA (Port 5173)
-├── docker-compose.yml        # Full-stack Docker composition setup
-└── .env.example              # Environments template
+├── backend/              # Fastify Node.js API backend (Port 3000)
+├── ai/                   # FastAPI Python AI Service & Workers (Port 8000)
+├── frontend/             # React Vite TS Frontend SPA (Port 5173)
+├── docker-compose.yml    # Full-stack Docker composition setup
+└── .env                  # Environments configuration
 ```
 
-## 🏃 Getting Started (Local Development)
+## 4. Methodology and Model Development
+The core intelligence of TechPrep AI is driven by Google Generative AI (Gemini 1.5 Pro) and Groq API (supporting Llama 3 models). The methodology for model interaction relies heavily on **Structured Prompt Engineering**.
 
-The easiest way to run the entire stack locally is using Docker Compose.
+*   **Role-Specific Competency Maps:** The AI uses predefined domain lists and competency maps. During question generation, the model is injected with a `selected_domain` constraint, forcing it to generate strict, topic-based questions rather than generic filler.
+*   **Granular Output Schemas:** The system enforces strict JSON outputs from the LLM. The evaluation prompt dictates that the model must return not just a numerical score, but a detailed `ScoreAnswerResponse` object containing:
+    *   `technical_errors`: Specific coding or architectural mistakes.
+    *   `key_concepts_missed`: Important topics the candidate forgot to mention.
+    *   `what_was_correct`: Positive reinforcement of correct statements.
+    *   `interviewer_correction`: A conversational, spoken-style correction as if the interviewer is interrupting to correct the candidate.
+    *   `ideal_answer_outline`: A structured blueprint of the perfect response.
+*   **Groq API Integration**: Native support for Groq enables using `llama-3.1-8b-instant` for ultra-low latency question delivery, and `llama-3.3-70b-specdec` for scoring.
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/vinayak-swain/AiForImpactProject.git
-   cd AiForImpactProject
-   ```
+## 5. Implementation and Testing
+Implementation was carried out across the entire stack:
+*   **Database:** A `selectedDomain` column was added to the `Session` table in PostgreSQL to persist the context of the interview.
+*   **API Layer:** Fastify routes were updated to accept domain parameters and forward them to the Python AI service.
+*   **AI Service:** The `role_prompts.py` file was heavily modified to support domain locking and granular feedback extraction. The integration was tested using strict JSON schemas to ensure the LLM adhered to constraints.
+*   **Frontend UI:** The React application was enhanced with a domain selector during session creation. The `SummaryPage` and `SessionPage` were updated to render the new detailed technical breakdown in beautifully styled accordions and real-time chat bubbles.
 
-2. **Configure Environment Variables:**
-   Copy `.env.example` to `.env` in the root directory. You must supply your own Google Gemini API Key.
-   ```bash
-   cp .env.example .env
-   ```
+## 6. Results, Analysis and Discussion
+The implementation of domain locking and granular feedback fundamentally transformed the platform from a generic conversational agent into a rigorous technical interviewer. 
 
-3. **Start the stack:**
-   ```bash
-   docker-compose up --build
-   ```
-   This will spin up Postgres, Redis, the Node API, the Python AI Service, the PDF Worker, and the React Frontend.
+**Analysis of the changes:**
+*   **Targeted Practice:** Users can now focus entirely on their weak areas (e.g., System Design) without being derailed by unrelated behavioral questions.
+*   **Actionable Feedback:** Previously, the AI provided generic coaching advice. Now, candidates receive highly specific corrections, directly pointing out flaws in their logic or missing constraints in their algorithms. 
+*   **Realism:** The addition of the "Interviewer's Verbal Correction" bubble mimics the natural flow of a real interview, where an interviewer might gently correct a candidate before moving on to the next question.
 
-4. **Access the Application:**
-   Open `http://localhost:5173` in your browser.
-
-## ☁️ Deployment & Production Setup
-
+## 7. Deployment
 TechPrep AI is designed for modern serverless and containerized deployment environments.
-*   **Frontend**: Deployed to [Vercel](https://vercel.com/) (e.g., `https://ai-for-impact-project-frontend.vercel.app`)
-*   **Node.js API**: Deployed as a Web Service to [Render](https://render.com/) (e.g., `https://aiforimpactproject.onrender.com`)
-*   **Python AI Service**: Deployed as a Web Service to [Render](https://render.com/) (e.g., `https://aiforimpactproject-ai.onrender.com`)
-*   **Database & Redis**: Supabase Postgres and Upstash Redis clusters
+*   **Frontend:** Deployed to Vercel, providing edge caching and fast global delivery.
+*   **Node.js API:** Deployed as a Web Service to Render.
+*   **Python AI Service & Workers:** Deployed as Web Services and Background Workers on Render, handling heavy ML and PDF processing tasks.
+*   **Database & Redis:** Supabase Postgres and Upstash Redis clusters ensure high availability and low latency data access.
+*   **Local Development:** The entire stack is orchestrated locally using `docker-compose`, providing a seamless developer experience.
 
----
+## 8. Conclusion and Future Work
+TechPrep AI successfully demonstrates the capability of modern LLMs to serve as highly effective, domain-specific technical interviewers. By enforcing strict schemas and domain constraints, the platform provides an invaluable tool for candidates preparing for competitive tech roles.
 
-## 🔑 Comprehensive OAuth Configuration Guide
-
-To enable Google and GitHub authentication, you must register the application on their developer portals and configure the exact callback URIs.
-
-### 1. Google OAuth 2.0 Setup
-1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
-2. Create a new project or select an existing one.
-3. Go to **APIs & Services > OAuth consent screen**:
-   * Select **External** user type.
-   * Complete the app information (App name, support email, developer contact).
-   * In **Scopes**, add `.../auth/userinfo.email` and `.../auth/userinfo.profile`.
-4. Go to **APIs & Services > Credentials**:
-   * Click **+ Create Credentials** and select **OAuth client ID**.
-   * Select **Web application** as the application type.
-   * Add **Authorized JavaScript origins**:
-     * Development: `http://localhost:3000`
-     * Production: `https://aiforimpactproject.onrender.com` (Your Render API URL)
-   * Add **Authorized redirect URIs**:
-     * Development: `http://localhost:3000/api/auth/oauth/google/callback`
-     * Production: `https://aiforimpactproject.onrender.com/api/auth/oauth/google/callback`
-5. Copy the generated **Client ID** and **Client Secret** and add them to your environment variables (`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`).
-
-### 2. GitHub OAuth Setup
-1. Go to your GitHub profile settings and navigate to **Developer Settings > OAuth Apps**.
-2. Click **Register a new application**:
-   * **Application name**: TechPrep AI
-   * **Homepage URL**:
-     * Development: `http://localhost:5173`
-     * Production: `https://ai-for-impact-project-frontend.vercel.app` (Your Vercel Frontend URL)
-   * **Authorization callback URL**:
-     * Development: `http://localhost:3000/api/auth/oauth/github/callback`
-     * Production: `https://aiforimpactproject.onrender.com/api/auth/oauth/github/callback` (Your Render API URL)
-3. Register the application, then click **Generate a new client secret**.
-4. Copy the **Client ID** and **Client Secret** and add them to your environment variables (`GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`).
-
----
-
-## ⚙️ Environment Variables Checklist
-
-Ensure these variables are correctly set in the environment settings of your deployment platforms:
-
-### 1. Frontend (Vercel)
-| Variable | Description | Example / Recommended Value |
-| :--- | :--- | :--- |
-| `VITE_API_URL` | Base URL of your Node API backend | `https://aiforimpactproject.onrender.com/api` |
-
-### 2. Node.js API (Render Web Service)
-| Variable | Description | Example / Recommended Value |
-| :--- | :--- | :--- |
-| `NODE_ENV` | Mode of operation | `production` |
-| `PORT` | Port for the backend | `10000` (Render handles this dynamically) |
-| `DATABASE_URL` | PostgreSQL connection URL | `postgresql://postgres:...` (Supabase or Render DB) |
-| `REDIS_URL` | Redis connection URL | `rediss://default:...` (Upstash Redis) |
-| `AI_SERVICE_URL` | URL of the Python AI Service | `https://aiforimpactproject-ai.onrender.com` |
-| `WEB_URL` | URL of the frontend app | `https://ai-for-impact-project-frontend.vercel.app` |
-| `JWT_SECRET` | Secret key used to sign JWT access tokens | *A long, secure random string* |
-| `COOKIE_SECRET` | Secret key used to sign cookies | *A long, secure random string* |
-| `GOOGLE_CLIENT_ID` | Google OAuth Client ID | `your-google-client-id.apps.googleusercontent.com` |
-| `GOOGLE_CLIENT_SECRET`| Google OAuth Client Secret | `GOCSPX-your-google-client-secret` |
-| `GITHUB_CLIENT_ID` | GitHub OAuth Client ID | `your-github-client-id` |
-| `GITHUB_CLIENT_SECRET`| GitHub OAuth Client Secret | `your-github-client-secret` |
-
-### 3. Python AI Service (Render Web Service / Background Worker)
-| Variable | Description | Example / Recommended Value |
-| :--- | :--- | :--- |
-| `GEMINI_API_KEY` | Google Gemini API Key for model queries | `AIzaSy...` (Get from Google AI Studio) |
-| `DATABASE_URL` | PostgreSQL connection URL | `postgresql://postgres:...` |
-| `REDIS_URL` | Redis connection URL | `rediss://default:...` |
-| `AWS_ACCESS_KEY_ID` | AWS Access Key ID for S3 storage | `AKIA...` |
-| `AWS_SECRET_ACCESS_KEY`| AWS Secret Access Key for S3 storage | `your-s3-secret-key` |
-| `AWS_REGION` | AWS Region for S3 bucket | `us-east-1` |
-| `S3_BUCKET_NAME` | Name of the bucket to store generated reports| `techprep-ai-reports` |
-
----
-
-## 📄 License
-This project is proprietary.
-
+**Future Work:**
+*   **Code Execution Environment:** Integrating a live code editor where the AI can compile and run candidate code, providing feedback on syntax and algorithmic complexity.
+*   **Adaptive Difficulty:** Implementing an algorithm to dynamically adjust the difficulty of subsequent questions based on the candidate's performance.
+*   **Expanded Domain Libraries:** Building more rigorous competency maps and grading rubrics for highly specialized roles.
