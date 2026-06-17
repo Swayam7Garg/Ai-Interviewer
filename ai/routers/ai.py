@@ -8,7 +8,7 @@ from models.schemas import (
     ScoreAnswerRequest, ScoreAnswerResponse,
     GenerateFeedbackRequest, ReportSummaryRequest, ReportSummaryResponse
 )
-from services.gemini_client import run_gemini_json, get_model, is_mock
+from services.gemini_client import run_gemini_json, get_model, is_mock, run_llm_stream
 from services.parser import get_file_text
 from services.role_prompts import get_role_config, get_question_generation_prompt, get_scoring_prompt
 
@@ -152,35 +152,12 @@ Keep tone: direct coach, not cheerleader. No filler phrases like "Great job!" or
 """
 
     async def event_generator():
-        active_model = get_model()
-        if is_mock or not active_model:
-            # Simulated streaming for mock mode
-            mock_text = [
-                "STRENGTH:\n",
-                "You clearly articulated the technical approach ",
-                "and demonstrated hands-on experience with the tooling.\n\n",
-                "WEAKNESS:\n",
-                "The Result component was missing — ",
-                "you never quantified the business impact of your work.\n\n",
-                "IMPROVEMENT:\n",
-                f"For your next {request.role} answer, always close with a metric: ",
-                "'This reduced latency by X%' or 'improved throughput by Xk RPS'.\n\n",
-            ]
-            for chunk in mock_text:
-                for char in chunk:
-                    yield f"data: {char}\n\n"
-                    await asyncio.sleep(0.008)
-                await asyncio.sleep(0.1)
-            return
-
         try:
-            response = active_model.generate_content(prompt, stream=True)
-            for chunk in response:
-                if chunk.text:
-                    yield f"data: {chunk.text}\n\n"
-                    await asyncio.sleep(0.01)
+            for chunk in run_llm_stream(prompt, use_fast=True):
+                yield f"data: {chunk}\n\n"
+                await asyncio.sleep(0.01)
         except Exception as e:
-            logger.error(f"Error streaming Gemini feedback: {e}")
+            logger.error(f"Error streaming LLM feedback: {e}")
             yield f"data: Error generating feedback: {str(e)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

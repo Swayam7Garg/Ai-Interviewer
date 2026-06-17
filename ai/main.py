@@ -1,12 +1,13 @@
 import logging
 import os
 import uvicorn
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from routers.ai import router as ai_router
 from dotenv import load_dotenv
 
 load_dotenv()
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from routers.ai import router as ai_router
 
 # Setup logging
 logging.basicConfig(

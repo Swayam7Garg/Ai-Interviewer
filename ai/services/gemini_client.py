@@ -53,6 +53,47 @@ if is_mock:
 def get_model():
     return fast_model or model
 
+def run_llm_stream(prompt: str, use_fast: bool = True):
+    """
+    Generator yielding text chunks from Gemini or Groq streaming API.
+    """
+    if is_mock or not (use_groq or use_gemini):
+        mock_text = "STRENGTH:\nDemonstrated strong domain logic and structured reasoning.\n\nWEAKNESS:\nLacked specific metrics to quantify system improvement outcomes.\n\nIMPROVEMENT:\nInclude explicit performance statistics like CPU or latency overhead."
+        for char in mock_text:
+            yield char
+        return
+
+    # --- GROQ STREAMING ---
+    if use_groq and groq_client:
+        active_model = "llama-3.1-8b-instant" if use_fast else "llama-3.3-70b-specdec"
+        try:
+            completion = groq_client.chat.completions.create(
+                model=active_model,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+                temperature=0.3,
+            )
+            for chunk in completion:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+        except Exception as e:
+            logger.error(f"Groq stream error: {e}")
+            yield f"Error generating feedback: {str(e)}"
+        return
+
+    # --- GEMINI STREAMING ---
+    active_model = fast_model if use_fast else model
+    if active_model:
+        try:
+            response = active_model.generate_content(prompt, stream=True)
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            logger.error(f"Gemini stream error: {e}")
+            yield f"Error generating feedback: {str(e)}"
+
 def run_gemini_json(prompt: str, generation_config: dict = None, use_fast: bool = False) -> dict:
     """
     Runs an LLM request (Gemini or Groq) and returns parsed JSON.
