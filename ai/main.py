@@ -40,6 +40,10 @@ app.include_router(ai_router)
 def health_check():
     return {"status": "healthy", "service": "ai-service"}
 
+@app.get("/")
+def read_root():
+    return {"status": "healthy", "message": "TechPrep AI Service is running"}
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     # Run server

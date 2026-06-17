@@ -71,6 +71,7 @@ export const SessionPage: React.FC = () => {
   // Cooldown: minimum ms between two movement-warning events
   const lastWarningTimeRef = useRef(0);
   const maxMovementWarningsRef = useRef(DEFAULT_MAX_WARNINGS);
+  const webcamStreamRef = useRef<MediaStream | null>(null);
 
   // ── Interview State ───────────────────────────────────────────────────────
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
@@ -181,7 +182,8 @@ export const SessionPage: React.FC = () => {
   // ── Webcam Stream ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!sessionStarted || !isProctoringEnabled) {
-      webcamStream?.getTracks().forEach(t => t.stop());
+      webcamStreamRef.current?.getTracks().forEach(t => t.stop());
+      webcamStreamRef.current = null;
       setWebcamStream(null);
       return;
     }
@@ -191,6 +193,7 @@ export const SessionPage: React.FC = () => {
           video: { width: 640, height: 480, frameRate: { max: 15 } },
           audio: false,
         });
+        webcamStreamRef.current = stream;
         setWebcamStream(stream);
         if (videoRef.current) videoRef.current.srcObject = stream;
       } catch (err) {
@@ -200,7 +203,10 @@ export const SessionPage: React.FC = () => {
       }
     };
     startWebcam();
-    return () => { webcamStream?.getTracks().forEach(t => t.stop()); };
+    return () => {
+      webcamStreamRef.current?.getTracks().forEach(t => t.stop());
+      webcamStreamRef.current = null;
+    };
   }, [sessionStarted, isProctoringEnabled]);
 
   // ── Motion + Face Detection Loop ──────────────────────────────────────────

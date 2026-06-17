@@ -37,7 +37,7 @@ async function main() {
     origin: (origin, cb) => {
       // Allow any localhost port for development, or the configured WEB_URL
       const allowedOrigin = (process.env.WEB_URL || 'http://localhost:5173').replace(/\/$/, '');
-      if (!origin || (origin && origin.startsWith(allowedOrigin)) || /^http:\/\/localhost:\d+$/.test(origin)) {
+      if (!origin || (origin && origin.startsWith(allowedOrigin)) || /^http:\/\/localhost:\d+$/.test(origin) || /\.vercel\.app$/.test(origin)) {
         cb(null, true);
       } else {
         cb(new Error(`Not allowed by CORS: ${origin}`), false);

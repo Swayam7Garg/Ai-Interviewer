@@ -563,7 +563,7 @@ async function dbPlugin(fastify: FastifyInstance) {
 
     fastify.log.info('PostgreSQL schema initialized and mock users seeded successfully');
   } catch (err) {
-    fastify.log.warn('PostgreSQL connection failed. Falling back to an in-memory database mock for testing.');
+    fastify.log.warn(err, 'PostgreSQL connection failed. Falling back to an in-memory database mock for testing.');
     activeDb = new MockPool();
   }
 
