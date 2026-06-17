@@ -127,21 +127,41 @@ export const SessionPage: React.FC = () => {
     }
   };
 
-  // ── Tab Switch Detection ───────────────────────────────────────────────────
+  // ── Tab Switch & Focus Loss Detection ──────────────────────────────────────
+  const lastFocusLossRef = useRef<number>(0);
+
   useEffect(() => {
     if (!sessionStarted || !isProctoringEnabled) return;
+
+    const handleViolation = (reason: string) => {
+      const now = Date.now();
+      if (now - lastFocusLossRef.current < 5000) return; // Limit to once every 5 seconds
+      lastFocusLossRef.current = now;
+
+      const timestamp = new Date().toLocaleTimeString();
+      setProctoringLogs(prev => [...prev, { timestamp, event: reason }]);
+      setWarningCount(c => c + 1);
+      setProctoringWarnings(prev => [...prev, `[${timestamp}] Warning: ${reason}.`]);
+      alert(`⚠️ Proctoring Warning: ${reason} is prohibited during the interview!`);
+    };
+
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        const timestamp = new Date().toLocaleTimeString();
-        const logMsg = 'Tab switched / window lost focus';
-        setProctoringLogs(prev => [...prev, { timestamp, event: logMsg }]);
-        setWarningCount(c => c + 1);
-        setProctoringWarnings(prev => [...prev, `[${timestamp}] Warning: Tab switched or browser minimized.`]);
-        alert('⚠️ Proctoring Warning: Tab switching is prohibited during the interview!');
+        handleViolation('Tab switched / browser minimized');
       }
     };
+
+    const handleBlur = () => {
+      handleViolation('Window lost focus / clicked outside');
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+    };
   }, [sessionStarted, isProctoringEnabled]);
 
   // ── Load BlazeFace Model ───────────────────────────────────────────────────
@@ -348,6 +368,13 @@ export const SessionPage: React.FC = () => {
                   setFaceDetectionStatus('looking_away');
                   ctx.strokeStyle = '#EF4444';
                   ctx.strokeRect(sx, sy, w, h);
+                  setWarningCount(c => {
+                    if (c % 10 === 0) {
+                      setProctoringLogs(prev => [...prev, { timestamp, event: 'Candidate looking away from screen' }]);
+                      setProctoringWarnings(prev => [...prev, `[${timestamp}] Warning: Looking away from screen.`]);
+                    }
+                    return c + 1;
+                  });
                   return;
                 }
               }
@@ -477,7 +504,14 @@ export const SessionPage: React.FC = () => {
       const currentSessionText = finalTranscript + interimTranscript;
       setResponseText(stableTextRef.current + (stableTextRef.current.trim() ? ' ' : '') + currentSessionText);
     };
-    rec.onerror = (err: any) => console.error('Speech error:', err);
+    rec.onerror = (err: any) => {
+      console.error('Speech error:', err);
+      if (err.error === 'not-allowed') {
+        alert('🎙️ Microphone Permission Denied:\nPlease click the microphone icon in your browser address bar to allow microphone access.');
+      } else if (err.error === 'no-speech') {
+        console.warn('Speech recognition: No speech detected.');
+      }
+    };
     rec.onend = () => {
       if (!isMutedRef.current && isListeningRef.current) {
         try { rec.start(); } catch {}
