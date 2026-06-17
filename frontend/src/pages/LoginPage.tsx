@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ParticleBackground } from '../components/ParticleBackground';
-import { api } from '../utils/api';
+import { api, API_BASE_URL } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
 
 export const LoginPage: React.FC = () => {
@@ -76,8 +76,7 @@ export const LoginPage: React.FC = () => {
           <div className="space-y-3 mb-8">
             <button 
               onClick={() => {
-                const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-                window.location.href = `${apiBase}/auth/oauth/google`;
+                window.location.href = `${API_BASE_URL}/auth/oauth/google`;
               }}
               className="w-full flex items-center justify-center gap-3 py-3 px-6 border-2 border-outline/30 rounded-full font-bold text-on-surface hover:bg-surface-container-low transition-all duration-200 text-sm"
             >
@@ -90,8 +89,7 @@ export const LoginPage: React.FC = () => {
             </button>
             <button 
               onClick={() => {
-                const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-                window.location.href = `${apiBase}/auth/oauth/github`;
+                window.location.href = `${API_BASE_URL}/auth/oauth/github`;
               }}
               className="w-full flex items-center justify-center gap-3 py-3 px-6 bg-[#0d1117] text-white rounded-full font-bold hover:opacity-90 transition-all duration-200 border border-outline/30 text-sm"
             >
