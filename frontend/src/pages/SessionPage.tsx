@@ -412,12 +412,19 @@ export const SessionPage: React.FC = () => {
 
   const speakUtterance = (text: string, rate = 1.0, onEnd?: () => void) => {
     if (!('speechSynthesis' in window) || !text.trim()) { onEnd?.(); return; }
+    window.speechSynthesis.cancel();
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
     const utterance = new SpeechSynthesisUtterance(text);
     const voice = getBestVoice();
     if (voice) utterance.voice = voice;
     utterance.rate = rate;
     utterance.onend = () => onEnd?.();
-    utterance.onerror = () => onEnd?.();
+    utterance.onerror = (e) => {
+      console.error('SpeechSynthesis error:', e);
+      onEnd?.();
+    };
     window.speechSynthesis.speak(utterance);
   };
 
@@ -858,6 +865,20 @@ export const SessionPage: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Voice Mode Toggle */}
+              <div className="flex items-center justify-between p-4 bg-surface-container/40 border border-outline-variant rounded-2xl">
+                <div className="flex flex-col gap-0.5 text-left">
+                  <span className="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-primary text-xs">record_voice_over</span>
+                    Interactive Voice Mode
+                  </span>
+                  <span className="text-[10px] text-on-surface-variant font-medium">
+                    Interviewer speaks questions aloud and listens for your voice responses
+                  </span>
+                </div>
+                <input type="checkbox" checked={isVoiceMode} onChange={e => setIsVoiceMode(e.target.checked)} className="w-5 h-5 rounded text-primary focus:ring-primary cursor-pointer" />
               </div>
             </div>
 
