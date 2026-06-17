@@ -548,40 +548,22 @@ export const SummaryPage: React.FC = () => {
     );
   }
 
-  // Fallback to mock session details if no actual session could be resolved
-  const activeSession = session || {
-    id: 'mock-session',
-    role: 'Senior Frontend Engineer',
-    type: 'technical',
-    overallScore: 84,
-    endedAt: new Date().toISOString(),
-    answers: [
-      {
-        id: 'q1',
-        questionText: "Describe a time you had to resolve a complex technical conflict within your team. What was the situation and how did you handle it?",
-        responseText: "We were building a React application where half the team wanted to use Redux Toolkit for state management, while the other half advocated for simple React Context. The conflict was stalling development. I scheduled a technical review meeting where we documented the trade-offs of both approaches relative to our project scope. We eventually agreed that Context was sufficient for our MVP, but we would establish a migration path to Redux if state grew complex.",
-        scores: {
-          id: 's1',
-          overallScore: 86,
-          starScore: 21,
-          techDepthScore: 22,
-          commScore: 17,
-          relevanceScore: 13,
-          aiFeedbackJson: {
-            star: {
-              situation: "Clearly identified conflict around state management choices and the project stall.",
-              task: "Took initiative to resolve the deadlock to prevent further schedule slippage.",
-              action: "Facilitated a structured trade-off session. Used documentation to ground the team in data rather than opinions.",
-              result: "Aligned team consensus, resumed development, and finished MVP on time."
-            },
-            topStrength: "Exceptional trade-off reasoning and technical moderation style.",
-            topWeakness: "Lacked explicit metrics (e.g. bundle size savings, delivery speedup) to quantify results.",
-            coachingAdvice: "To elevate this answer, include specific metrics about development speed or code complexity reduction resulting from this choice."
-          }
-        }
-      }
-    ]
-  };
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-background text-on-surface flex items-center justify-center flex-col gap-4 font-body">
+        <p className="font-bold text-lg text-error">Session Report Not Found</p>
+        <p className="text-sm text-on-surface-variant">We couldn't retrieve the details for this interview session. Please return to the dashboard.</p>
+        <button 
+          onClick={() => navigate('/dashboard')}
+          className="px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-sm shadow hover:opacity-90 transition-opacity"
+        >
+          Go to Dashboard
+        </button>
+      </div>
+    );
+  }
+
+  const activeSession = session;
 
   return (
     <div className={`${isDark ? 'theme-joy-dark bg-background text-on-surface' : 'theme-joy bg-background text-on-surface'} min-h-screen transition-colors duration-300 relative overflow-x-hidden font-body`}>

@@ -142,54 +142,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   // Authentication APIs
   async login(email: string, password?: string): Promise<AuthResponse> {
-    try {
-      const res = await request<AuthResponse>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password: password || 'password123' }),
-      });
-      localStorage.setItem('accessToken', res.accessToken);
-      localStorage.setItem('currentUser', JSON.stringify(res.user));
-      return res;
-    } catch (err) {
-      console.warn('API error, using mock login fallback', err);
-      // Mock login fallback
-      const mockUser: User = {
-        id: 'mock-user-123',
-        name: email.split('@')[0],
-        email: email,
-        roleTarget: 'Senior Frontend Engineer',
-        experienceLevel: 'senior',
-        streak: 15,
-      };
-      localStorage.setItem('accessToken', 'mock-access-token');
-      localStorage.setItem('currentUser', JSON.stringify(mockUser));
-      return { accessToken: 'mock-access-token', user: mockUser };
-    }
+    const res = await request<AuthResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password: password || 'password123' }),
+    });
+    localStorage.setItem('accessToken', res.accessToken);
+    localStorage.setItem('currentUser', JSON.stringify(res.user));
+    return res;
   },
 
   async register(name: string, email: string, roleTarget: string, experienceLevel: 'fresher' | 'junior' | 'mid' | 'senior', password?: string): Promise<AuthResponse> {
-    try {
-      const res = await request<AuthResponse>('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ name, email, password: password || 'password123', roleTarget, experienceLevel }),
-      });
-      localStorage.setItem('accessToken', res.accessToken);
-      localStorage.setItem('currentUser', JSON.stringify(res.user));
-      return res;
-    } catch (err) {
-      console.warn('API error, using mock register fallback', err);
-      const mockUser: User = {
-        id: 'mock-user-123',
-        name,
-        email,
-        roleTarget,
-        experienceLevel,
-        streak: 1,
-      };
-      localStorage.setItem('accessToken', 'mock-access-token');
-      localStorage.setItem('currentUser', JSON.stringify(mockUser));
-      return { accessToken: 'mock-access-token', user: mockUser };
-    }
+    const res = await request<AuthResponse>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password: password || 'password123', roleTarget, experienceLevel }),
+    });
+    localStorage.setItem('accessToken', res.accessToken);
+    localStorage.setItem('currentUser', JSON.stringify(res.user));
+    return res;
   },
 
   async logout(): Promise<void> {
@@ -224,30 +193,22 @@ export const api = {
     try {
       return await request<SessionStats>('/dashboard/stats');
     } catch (err) {
-      console.warn('API error, using mock dashboard stats fallback', err);
-      // Fallback matching mockup data
+      console.warn('API error fetching dashboard stats, returning empty metrics:', err);
       return {
-        totalSessions: 42,
-        avgScore: 84,
-        bestScore: 98,
-        streak: 15,
-        questionsAnswered: 120,
-        weakAreas: [
-          { dimension: 'STAR Structure', avgPercentage: 72, suggestion: 'Improve Situation-Task clarity. Use the Action phase to highlight personal ownership.' },
-          { dimension: 'Technical Depth', avgPercentage: 68, suggestion: 'Mention specific API protocols, architecture configurations, design patterns, or algorithms.' },
-          { dimension: 'Communication', avgPercentage: 74, suggestion: 'Reduce filler words such as "like", "actually", "basically".' }
-        ],
-        recentSessions: [
-          { id: '1', role: 'Senior Frontend Engineer', interviewType: 'technical', overallScore: 88, grade: 'B', endedAt: new Date().toISOString() },
-          { id: '2', role: 'Product Designer', interviewType: 'behavioural', overallScore: 74, grade: 'C', endedAt: new Date(Date.now() - 86400000 * 2).toISOString() }
-        ],
+        totalSessions: 0,
+        avgScore: 0,
+        bestScore: 0,
+        streak: 0,
+        questionsAnswered: 0,
+        weakAreas: [],
+        recentSessions: [],
         dimensionAverages: {
-          star: 18,
-          techDepth: 17,
-          comm: 15,
-          relevance: 12,
-          confidence: 8,
-          conciseness: 4
+          star: 0,
+          techDepth: 0,
+          comm: 0,
+          relevance: 0,
+          confidence: 0,
+          conciseness: 0
         }
       };
     }
@@ -257,16 +218,8 @@ export const api = {
     try {
       return await request<ScoreTrendItem[]>('/dashboard/score-trend');
     } catch (err) {
-      console.warn('API error, using mock score trend fallback', err);
-      return [
-        { id: '1', score: 65, date: 'Mon', role: 'SDE' },
-        { id: '2', score: 72, date: 'Tue', role: 'SDE' },
-        { id: '3', score: 68, date: 'Wed', role: 'SDE' },
-        { id: '4', score: 92, date: 'Thu', role: 'SDE' },
-        { id: '5', score: 78, date: 'Fri', role: 'SDE' },
-        { id: '6', score: 98, date: 'Sat', role: 'SDE' },
-        { id: '7', score: 88, date: 'Sun', role: 'SDE' }
-      ];
+      console.warn('API error fetching score trend, returning empty:', err);
+      return [];
     }
   },
 
@@ -274,177 +227,34 @@ export const api = {
     try {
       return await request<RadarItem[]>('/dashboard/radar-data');
     } catch (err) {
-      console.warn('API error, using mock radar data fallback', err);
-      return [
-        { subject: 'STAR Structure', current: 75, average: 70 },
-        { subject: 'Technical Depth', current: 80, average: 65 },
-        { subject: 'Communication', current: 85, average: 78 },
-        { subject: 'Relevance', current: 90, average: 85 },
-        { subject: 'Confidence', current: 70, average: 72 },
-        { subject: 'Conciseness', current: 95, average: 80 }
-      ];
+      console.warn('API error fetching radar data, returning empty:', err);
+      return [];
     }
   },
 
   // Session & active interview APIs
   async startSession(role: string, interviewType: 'behavioural' | 'technical' | 'resume_based', durationMins = 30, selectedDomain?: string): Promise<{ sessionId: string; firstQuestion: Question }> {
-    try {
-      return await request<{ sessionId: string; firstQuestion: Question }>('/sessions/start', {
-        method: 'POST',
-        body: JSON.stringify({ role, interviewType, durationMins, selectedDomain }),
-      });
-    } catch (err) {
-      console.warn('API error, using mock start session fallback', err);
-      const mockSessionId = 'mock-session-' + Date.now();
-      const mockQuestion: Question = {
-        id: 'mock-q-1',
-        sessionId: mockSessionId,
-        questionText: 'Can you describe a challenging technical project you worked on and how you handled architectural trade-offs?',
-        questionType: interviewType,
-        difficulty: 'medium',
-        orderIndex: 0
-      };
-      return { sessionId: mockSessionId, firstQuestion: mockQuestion };
-    }
+    return await request<{ sessionId: string; firstQuestion: Question }>('/sessions/start', {
+      method: 'POST',
+      body: JSON.stringify({ role, interviewType, durationMins, selectedDomain }),
+    });
   },
 
   async submitAnswer(sessionId: string, questionId: string, answerText: string): Promise<{ scoreId: string; scores: any; nextQuestion: Question | null }> {
-    try {
-      return await request<{ scoreId: string; scores: any; nextQuestion: Question | null }>(`/sessions/${sessionId}/answer`, {
-        method: 'POST',
-        body: JSON.stringify({ questionId, answerText }),
-      });
-    } catch (err) {
-      console.warn('API error, using mock submit answer fallback', err);
-      // Fallback mock AI scoring feedback
-      const nextQuestions = [
-        'How did you measure the success of your implementation?',
-        'Describe a conflict you had with a team member and how you resolved it.',
-        'How do you keep up-to-date with new engineering protocols and designs?',
-        null // last question
-      ];
-      const nextIndex = Math.floor(Math.random() * 3);
-      const nextQText = nextQuestions[nextIndex];
-      const nextQuestion: Question | null = nextQText ? {
-        id: 'mock-q-' + Date.now(),
-        sessionId,
-        questionText: nextQText,
-        questionType: 'technical',
-        difficulty: 'medium',
-        orderIndex: 1
-      } : null;
-
-      const mockScores = {
-        id: 'mock-score-' + Date.now(),
-        starScore: 18,
-        techDepthScore: 19,
-        commScore: 16,
-        relevanceScore: 13,
-        confidenceScore: 8,
-        concisenessScore: 4,
-        overallScore: 83,
-        aiFeedbackJson: {
-          star: {
-            situation: 'Described a high-traffic e-commerce portal migration.',
-            task: 'Tasked with refactoring legacy DB queries.',
-            action: 'Optimized index selection and added redis cache clusters.',
-            result: 'Reduced loading time by 40% and CPU usage by 20%.'
-          },
-          topStrength: 'Explicit details about Redis caching architecture.',
-          topWeakness: 'Rambled slightly near the discussion of metrics.',
-          fillerWords: ['like', 'basically'],
-          idealAnswerSkeleton: 'Introduce the throughput bottleneck, explain the optimization plan, and conclude with CPU % reduction.'
-        }
-      };
-
-      return {
-        scoreId: mockScores.id,
-        scores: mockScores,
-        nextQuestion
-      };
-    }
+    return await request<{ scoreId: string; scores: any; nextQuestion: Question | null }>(`/sessions/${sessionId}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ questionId, answerText }),
+    });
   },
 
   async endSession(sessionId: string): Promise<SessionDetail> {
-    try {
-      return await request<SessionDetail>(`/sessions/${sessionId}/end`, {
-        method: 'POST',
-      });
-    } catch (err) {
-      console.warn('API error, using mock end session fallback', err);
-      return {
-        id: sessionId,
-        userId: 'mock-user-123',
-        interviewType: 'technical',
-        role: 'Senior Frontend Engineer',
-        durationMins: 30,
-        startedAt: new Date(Date.now() - 1800000).toISOString(),
-        endedAt: new Date().toISOString(),
-        overallScore: 85,
-        grade: 'B'
-      };
-    }
+    return await request<SessionDetail>(`/sessions/${sessionId}/end`, {
+      method: 'POST',
+    });
   },
 
   async getSessionDetail(sessionId: string): Promise<SessionDetail> {
-    try {
-      return await request<SessionDetail>(`/sessions/${sessionId}`);
-    } catch (err) {
-      console.warn('API error, using mock session details fallback', err);
-      // Generate structured mock questions & answers
-      return {
-        id: sessionId,
-        userId: 'mock-user-123',
-        interviewType: 'technical',
-        role: 'Senior Frontend Engineer',
-        durationMins: 30,
-        startedAt: new Date(Date.now() - 1800000).toISOString(),
-        endedAt: new Date().toISOString(),
-        overallScore: 88,
-        grade: 'B',
-        questions: [
-          {
-            id: 'q-1',
-            sessionId,
-            questionText: 'Can you describe a challenging technical project you worked on and how you handled architectural trade-offs?',
-            questionType: 'technical',
-            difficulty: 'medium',
-            orderIndex: 0,
-            answer: {
-              id: 'a-1',
-              questionId: 'q-1',
-              userId: 'mock-user-123',
-              answerText: 'I led the migration of our legacy billing service to a new serverless backend, which improved uptime to 99.99% and decreased API latencies by 30%. We faced latency trade-offs with cold starts but optimized that using provisioned concurrency.',
-              wordCount: 38,
-              submittedAt: new Date().toISOString(),
-              score: {
-                id: 's-1',
-                answerId: 'a-1',
-                starScore: 21,
-                techDepthScore: 22,
-                commScore: 18,
-                relevanceScore: 13,
-                confidenceScore: 9,
-                concisenessScore: 5,
-                overallScore: 88,
-                aiFeedbackJson: {
-                  star: {
-                    situation: 'Migrating legacy billing systems.',
-                    task: 'Improve billing uptime and reliability under peak traffic.',
-                    action: 'Set up node.js serverless functions and optimized runtime packages.',
-                    result: '99.99% uptime achieved and latencies reduced by 30%.'
-                  },
-                  topStrength: 'Quantified results accurately using metrics.',
-                  topWeakness: 'Could elaborate on why serverless was chosen over containers.',
-                  fillerWords: [],
-                  idealAnswerSkeleton: 'Start with the migration, mention the runtime settings, discuss provisioned concurrency config, and end with database metrics.'
-                }
-              }
-            }
-          }
-        ]
-      };
-    }
+    return await request<SessionDetail>(`/sessions/${sessionId}`);
   },
 
   async getHistory(role?: string, type?: string): Promise<{ sessions: SessionDetail[] }> {
@@ -455,47 +265,10 @@ export const api = {
         const mappedType = type === 'Technical Deep Dive' ? 'technical' : type.toLowerCase();
         queryParams.append('type', mappedType);
       }
-      const res = await request<{ sessions: SessionDetail[] }>(`/sessions/history?${queryParams.toString()}`);
-      return res;
+      return await request<{ sessions: SessionDetail[] }>(`/sessions/history?${queryParams.toString()}`);
     } catch (err) {
-      console.warn('API error, using mock history fallback', err);
-      return {
-        sessions: [
-          {
-            id: '1',
-            userId: 'mock-user-123',
-            interviewType: 'technical',
-            role: 'Senior Frontend',
-            durationMins: 30,
-            startedAt: new Date(Date.now() - 86400000).toISOString(),
-            endedAt: new Date(Date.now() - 86400000 + 1800000).toISOString(),
-            overallScore: 92,
-            grade: 'A'
-          },
-          {
-            id: '2',
-            userId: 'mock-user-123',
-            interviewType: 'behavioural',
-            role: 'Product Manager',
-            durationMins: 30,
-            startedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-            endedAt: new Date(Date.now() - 86400000 * 3 + 1800000).toISOString(),
-            overallScore: 78,
-            grade: 'C'
-          },
-          {
-            id: '3',
-            userId: 'mock-user-123',
-            interviewType: 'technical',
-            role: 'SDE II',
-            durationMins: 30,
-            startedAt: new Date(Date.now() - 86400000 * 6).toISOString(),
-            endedAt: new Date(Date.now() - 86400000 * 6 + 1800000).toISOString(),
-            overallScore: 84,
-            grade: 'B'
-          }
-        ]
-      };
+      console.warn('API error fetching history, returning empty:', err);
+      return { sessions: [] };
     }
   },
 
