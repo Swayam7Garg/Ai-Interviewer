@@ -102,6 +102,10 @@ export const SessionPage: React.FC = () => {
   const aiStateRef = useRef(aiState);
   const stableTextRef = useRef('');
   const responseTextRef = useRef(responseText);
+  
+  const isLookingAwayRef = useRef(false);
+  const lookAwayStartTimeRef = useRef<number | null>(null);
+  const hasIncrementedLookAwayRef = useRef(false);
 
   useEffect(() => {
     responseTextRef.current = responseText;
@@ -358,26 +362,42 @@ export const SessionPage: React.FC = () => {
             const rightEye = face.landmarks[0];
             const leftEye = face.landmarks[1];
             const nose = face.landmarks[2];
+            let isCurrentlyLookingAway = false;
+
             if (rightEye && leftEye && nose) {
               const eyeDistance = leftEye[0] - rightEye[0];
               if (eyeDistance > 0) {
                 const noseOffset = (nose[0] - rightEye[0]) / eyeDistance;
-                // Loosened from 0.28–0.72 → 0.15–0.85
-                // Brief sideways glances (reading notes nearby) no longer flagged
-                if (noseOffset < 0.15 || noseOffset > 0.85) {
+                isCurrentlyLookingAway = noseOffset < 0.15 || noseOffset > 0.85;
+                if (isCurrentlyLookingAway) {
                   setFaceDetectionStatus('looking_away');
                   ctx.strokeStyle = '#EF4444';
                   ctx.strokeRect(sx, sy, w, h);
-                  setWarningCount(c => {
-                    if (c % 10 === 0) {
-                      setProctoringLogs(prev => [...prev, { timestamp, event: 'Candidate looking away from screen' }]);
-                      setProctoringWarnings(prev => [...prev, `[${timestamp}] Warning: Looking away from screen.`]);
-                    }
-                    return c + 1;
-                  });
+
+                  const now = Date.now();
+                  if (!isLookingAwayRef.current) {
+                    isLookingAwayRef.current = true;
+                    lookAwayStartTimeRef.current = now;
+                    hasIncrementedLookAwayRef.current = false;
+                  } else if (
+                    !hasIncrementedLookAwayRef.current &&
+                    lookAwayStartTimeRef.current &&
+                    now - lookAwayStartTimeRef.current >= 1500
+                  ) {
+                    hasIncrementedLookAwayRef.current = true;
+                    setWarningCount(c => c + 1);
+                    setProctoringLogs(prev => [...prev, { timestamp, event: 'Candidate looking away from screen (sustained)' }]);
+                    setProctoringWarnings(prev => [...prev, `[${timestamp}] Warning: Looking away from screen.`]);
+                  }
                   return;
                 }
               }
+            }
+
+            if (!isCurrentlyLookingAway) {
+              isLookingAwayRef.current = false;
+              lookAwayStartTimeRef.current = null;
+              hasIncrementedLookAwayRef.current = false;
             }
           }
           if (faceDetectionStatus !== 'movement') setFaceDetectionStatus('ok');
@@ -458,49 +478,31 @@ export const SessionPage: React.FC = () => {
     }
   };
 
-  const toggleDictation = () => {
-    if (!recognitionRef.current) {
-      alert('Speech recognition is not supported or enabled in this browser. Please use Google Chrome for voice features.');
-      return;
-    }
-    if (isListening) {
-      isListeningRef.current = false;
-      recognitionRef.current.stop();
-      setIsListening(false);
-      setAiState('idle');
-    } else {
-      setAiState('listening');
-      setIsListening(true);
-      isListeningRef.current = true;
-      stableTextRef.current = responseText;
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        console.error('Failed to start speech recognition:', e);
-      }
-    }
-  };
-
-  // ── Speech Recognition ────────────────────────────────────────────────────
-  useEffect(() => {
+  const startListening = () => {
+    if (isListeningRef.current) return;
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
+    
+    isListeningRef.current = true;
+    setIsListening(true);
+    stableTextRef.current = responseTextRef.current;
+
     const rec = new SR();
     rec.continuous = true;
     rec.interimResults = true;
-    rec.lang = navigator.language || 'en-US';
+    rec.lang = 'en-US';
+    rec.maxAlternatives = 1;
 
     rec.onstart = () => {
       setAiState('listening');
-      isListeningRef.current = true;
-      setIsListening(true);
-      stableTextRef.current = responseTextRef.current;
+      console.log('Speech recognition started');
     };
+
     rec.onresult = (event: any) => {
       if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
       let interimTranscript = '';
       let finalTranscript = '';
-      for (let i = 0; i < event.results.length; ++i) {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
           finalTranscript += transcript;
@@ -511,25 +513,75 @@ export const SessionPage: React.FC = () => {
       const currentSessionText = finalTranscript + interimTranscript;
       setResponseText(stableTextRef.current + (stableTextRef.current.trim() ? ' ' : '') + currentSessionText);
     };
-    rec.onerror = (err: any) => {
-      console.error('Speech error:', err);
-      if (err.error === 'not-allowed') {
+
+    rec.onerror = (event: any) => {
+      console.warn('Speech recognition error:', event.error);
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         alert('🎙️ Microphone Permission Denied:\nPlease click the microphone icon in your browser address bar to allow microphone access.');
-      } else if (err.error === 'no-speech') {
-        console.warn('Speech recognition: No speech detected.');
-      }
-    };
-    rec.onend = () => {
-      if (!isMutedRef.current && isListeningRef.current) {
-        try { rec.start(); } catch {}
-      } else {
-        setAiState(curr => curr === 'listening' ? 'idle' : curr);
+        isListeningRef.current = false;
         setIsListening(false);
+        setAiState('idle');
+        return;
+      }
+      // Auto-restart after a brief delay if we are still supposed to be listening
+      if (isListeningRef.current) {
+        setTimeout(startListening, 300);
       }
     };
+
+    rec.onend = () => {
+      // Auto-restart if we're still supposed to be listening
+      if (isListeningRef.current) {
+        setTimeout(startListening, 200);
+      } else {
+        setIsListening(false);
+        setAiState(curr => curr === 'listening' ? 'idle' : curr);
+      }
+    };
+
     recognitionRef.current = rec;
-    return () => { isListeningRef.current = false; rec.stop(); };
-  }, [isVoiceMode, isMuted]);
+    try {
+      rec.start();
+    } catch (e) {
+      console.error('Failed to start speech recognition:', e);
+    }
+  };
+
+  const stopListening = () => {
+    isListeningRef.current = false;
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null; // Prevent auto-restart
+      recognitionRef.current.onerror = null;
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        console.error('Failed to stop recognition:', e);
+      }
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+    setAiState(curr => curr === 'listening' ? 'idle' : curr);
+  };
+
+  const toggleDictation = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      alert('Speech recognition is not supported or enabled in this browser. Please use Google Chrome for voice features.');
+      return;
+    }
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  // ── Speech Recognition Cleanup ─────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      stopListening();
+    };
+  }, []);
 
   // ── Auto-speak on question ────────────────────────────────────────────────
   useEffect(() => {
@@ -543,12 +595,9 @@ export const SessionPage: React.FC = () => {
     if (sessionStarted && currentQuestion && isVoiceMode) {
       speakResponse(currentQuestion.questionText, (currentQuestion as any).briefAcknowledgment);
     } else if (!isVoiceMode) {
-      isListeningRef.current = false;
-      recognitionRef.current?.stop();
+      stopListening();
       window.speechSynthesis.cancel();
       if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
-      setAiState('idle');
-      setIsListening(false);
     }
   }, [isVoiceMode]);
 
@@ -599,8 +648,7 @@ export const SessionPage: React.FC = () => {
   const submitAnswer = async (text: string) => {
     if (!text.trim() || !currentQuestionRef.current || isSubmitting) return;
     setIsSubmitting(true);
-    isListeningRef.current = false;
-    recognitionRef.current?.stop();
+    stopListening();
     window.speechSynthesis.cancel();
     if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     setAiState('evaluating');
@@ -663,8 +711,7 @@ export const SessionPage: React.FC = () => {
     } else {
       setIsSubmitting(true);
       try {
-        isListeningRef.current = false;
-        recognitionRef.current?.stop();
+        stopListening();
         window.speechSynthesis.cancel();
         saveProctoringData(sessionId);
         // Save weak domains to localStorage for SummaryPage
@@ -680,8 +727,7 @@ export const SessionPage: React.FC = () => {
   };
 
   const handleForceEndSession = async () => {
-    isListeningRef.current = false;
-    recognitionRef.current?.stop();
+    stopListening();
     window.speechSynthesis.cancel();
     if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     setIsSubmitting(true);
@@ -701,8 +747,7 @@ export const SessionPage: React.FC = () => {
 
   const handleDoneSpeaking = () => {
     if (responseText.trim().length < 5 || isSubmitting) return;
-    isListeningRef.current = false;
-    recognitionRef.current?.stop();
+    stopListening();
     if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     submitAnswer(responseText);
   };
