@@ -37,6 +37,8 @@ class GenerateQuestionRequest(BaseModel):
     previous_questions: List[str] = []
     chat_history: Optional[List[Dict[str, Any]]] = None
     selected_domain: Optional[str] = None
+    adaptive_mode: Optional[bool] = False
+    last_score: Optional[float] = None  # Last overall_score (0-100) for adaptive difficulty
 
 class GenerateQuestionResponse(BaseModel):
     brief_acknowledgment: str = ""  # AI interviewer's contextual reply to the candidate's last answer

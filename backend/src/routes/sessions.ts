@@ -8,6 +8,7 @@ const StartSessionSchema = z.object({
   durationMins: z.number().int().positive(),
   resumeId: z.string().optional(),
   selectedDomain: z.string().optional(),
+  adaptiveMode: z.boolean().optional().default(false),
 });
 
 const AnswerSchema = z.object({
@@ -96,8 +97,8 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
     // Create session in DB
     const sessionId = crypto.randomUUID();
     const sessionRes = await fastify.db.query(
-      'INSERT INTO "Session" (id, "userId", "interviewType", role, "durationMins", "selectedDomain") VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [sessionId, userId, data.interviewType, data.role, data.durationMins, data.selectedDomain || null]
+      'INSERT INTO "Session" (id, "userId", "interviewType", role, "durationMins", "selectedDomain", "adaptiveMode") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [sessionId, userId, data.interviewType, data.role, data.durationMins, data.selectedDomain || null, data.adaptiveMode || false]
     );
 
     // Create first question in DB
@@ -280,6 +281,8 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
               previous_questions: previousQuestionsText,
               chat_history: chatHistory,  // Full conversation for contextual memory
               selected_domain: session.selectedDomain || null,
+              adaptive_mode: session.adaptiveMode || false,
+              last_score: scoreData ? scoreData.overall_score : null,
             }),
           });
 

@@ -238,10 +238,10 @@ export const api = {
   },
 
   // Session & active interview APIs
-  async startSession(role: string, interviewType: 'behavioural' | 'technical' | 'resume_based', durationMins = 30, selectedDomain?: string): Promise<{ sessionId: string; firstQuestion: Question }> {
+  async startSession(role: string, interviewType: 'behavioural' | 'technical' | 'resume_based', durationMins = 30, selectedDomain?: string, adaptiveMode = false): Promise<{ sessionId: string; firstQuestion: Question }> {
     return await request<{ sessionId: string; firstQuestion: Question }>('/sessions/start', {
       method: 'POST',
-      body: JSON.stringify({ role, interviewType, durationMins, selectedDomain }),
+      body: JSON.stringify({ role, interviewType, durationMins, selectedDomain, adaptiveMode }),
     });
   },
 

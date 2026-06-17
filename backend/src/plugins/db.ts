@@ -167,6 +167,7 @@ class MockPool {
         role: params[3],
         durationMins: params[4],
         selectedDomain: params[5] || null,
+        adaptiveMode: params[6] || false,
         overallScore: null,
         grade: null,
         reportS3Key: null,
@@ -501,6 +502,7 @@ async function dbPlugin(fastify: FastifyInstance) {
         "grade" TEXT,
         "reportS3Key" TEXT,
         "selectedDomain" TEXT,
+        "adaptiveMode" BOOLEAN DEFAULT FALSE,
         "startedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "endedAt" TIMESTAMP
       );
@@ -546,6 +548,7 @@ async function dbPlugin(fastify: FastifyInstance) {
     await pool.query(ddlQuery);
     // Explicitly migration to add selectedDomain if it doesn't exist yet
     await pool.query('ALTER TABLE "Session" ADD COLUMN IF NOT EXISTS "selectedDomain" TEXT;');
+    await pool.query('ALTER TABLE "Session" ADD COLUMN IF NOT EXISTS "adaptiveMode" BOOLEAN DEFAULT FALSE;');
 
     // Seed mock users for fallback token compatibility in local test environments
     const mockUsers = [

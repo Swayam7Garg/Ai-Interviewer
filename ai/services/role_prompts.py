@@ -201,6 +201,8 @@ def get_question_generation_prompt(
     previous_questions: list,
     resume_ctx: str,
     selected_domain: str = None,
+    adaptive_mode: bool = False,
+    last_score: float = None,
 ) -> str:
     """
     HackerRank / Unstop style domain-cycling prompt.
@@ -256,9 +258,19 @@ def get_question_generation_prompt(
         next_domain_idx = total_answers % len(domains)
         next_domain = domains[next_domain_idx]
 
-    # Set per-domain difficulty
+    # Set per-domain difficulty — adaptive_mode overrides heuristic when last_score is provided
     perf = domain_performance.get(next_domain_idx, [])
-    if not perf:
+    if adaptive_mode and last_score is not None:
+        if last_score >= 80:
+            adaptive_difficulty = "hard"
+            difficulty_rationale = f"Adaptive Mode: candidate scored {last_score:.0f}/100 → escalate to hard."
+        elif last_score >= 50:
+            adaptive_difficulty = "medium"
+            difficulty_rationale = f"Adaptive Mode: candidate scored {last_score:.0f}/100 → keep at medium."
+        else:
+            adaptive_difficulty = "easy"
+            difficulty_rationale = f"Adaptive Mode: candidate scored {last_score:.0f}/100 → drop to easy for scaffolding."
+    elif not perf:
         adaptive_difficulty = "medium"
         difficulty_rationale = f"First question on '{next_domain}'. Start at medium difficulty."
     elif perf.count("strong") > perf.count("weak"):

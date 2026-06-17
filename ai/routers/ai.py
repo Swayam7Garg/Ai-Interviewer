@@ -76,6 +76,8 @@ async def generate_question(request: GenerateQuestionRequest):
         previous_questions=request.previous_questions,
         resume_ctx=resume_ctx,
         selected_domain=request.selected_domain,
+        adaptive_mode=request.adaptive_mode or False,
+        last_score=request.last_score,
     )
 
     try:
