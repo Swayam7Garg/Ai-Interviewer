@@ -9,6 +9,10 @@ from datetime import datetime
 from sqlalchemy import create_engine, text
 import redis
 import boto3
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import ReportLab modules
 from reportlab.lib.pagesizes import letter
@@ -32,7 +36,7 @@ engine = create_engine(db_url)
 
 # Redis setup
 try:
-    redis_client = redis.from_url(redis_url)
+    redis_client = redis.from_url(redis_url, health_check_interval=30, retry_on_timeout=True)
     logger.info("Connected to Redis successfully.")
 except Exception as e:
     logger.error(f"Redis connection failed: {e}")
@@ -492,8 +496,8 @@ def run_worker():
             s3_key = f"reports/{user_id}/{session_id}.pdf"
             
             if is_mock_s3:
-                # Save locally in the API local_storage folder so GET /download-local can serve it!
-                api_storage_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "api", "local_storage")
+                # Save locally in the backend local_storage folder so GET /download-local can serve it!
+                api_storage_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backend", "local_storage")
                 os.makedirs(api_storage_dir, exist_ok=True)
                 dest_local_path = os.path.join(api_storage_dir, s3_key.replace("/", "_"))
                 

@@ -6,7 +6,37 @@ import crypto from 'crypto';
 import '@fastify/multipart';
 
 export default async function resumeRoutes(fastify: FastifyInstance) {
-  // Protect all routes in this file
+  // GET /download-local (Serves files locally in development)
+  fastify.get('/download-local', {
+    schema: {
+      querystring: {
+        type: 'object',
+        required: ['key'],
+        properties: {
+          key: { type: 'string' }
+        }
+      }
+    },
+    handler: async (request, reply) => {
+      const { key } = request.query as { key: string };
+      const localStorageDir = path.join(process.cwd(), 'local_storage');
+      const filePath = path.join(localStorageDir, key.replace(/\//g, '_'));
+
+      if (!fs.existsSync(filePath)) {
+        return reply.status(404).send({ error: 'Not Found', message: 'File not found' });
+      }
+
+      const stream = fs.createReadStream(filePath);
+      let contentType = 'application/pdf';
+      if (key.endsWith('.txt')) contentType = 'text/plain';
+      else if (key.endsWith('.png')) contentType = 'image/png';
+
+      reply.header('Content-Type', contentType);
+      return reply.send(stream);
+    }
+  });
+
+  // Protect other routes in this file
   fastify.addHook('preHandler', fastify.authenticate);
 
   // POST /upload
@@ -114,33 +144,5 @@ export default async function resumeRoutes(fastify: FastifyInstance) {
     return { success: true };
   });
 
-  // GET /download-local (Serves files locally in development)
-  fastify.get('/download-local', {
-    schema: {
-      querystring: {
-        type: 'object',
-        required: ['key'],
-        properties: {
-          key: { type: 'string' }
-        }
-      }
-    },
-    handler: async (request, reply) => {
-      const { key } = request.query as { key: string };
-      const localStorageDir = path.join(process.cwd(), 'local_storage');
-      const filePath = path.join(localStorageDir, key.replace(/\//g, '_'));
 
-      if (!fs.existsSync(filePath)) {
-        return reply.status(404).send({ error: 'Not Found', message: 'File not found' });
-      }
-
-      const stream = fs.createReadStream(filePath);
-      let contentType = 'application/pdf';
-      if (key.endsWith('.txt')) contentType = 'text/plain';
-      else if (key.endsWith('.png')) contentType = 'image/png';
-
-      reply.header('Content-Type', contentType);
-      return reply.send(stream);
-    }
-  });
 }

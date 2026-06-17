@@ -425,7 +425,12 @@ export const SummaryPage: React.FC = () => {
   const [aiSummary, setAiSummary] = useState<{ executive_summary: string, action_plan: string[] } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [proctoringData, setProctoringData] = useState<{ enabled: boolean; warnings: string[]; warningCount: number; logs: any[] } | null>(null);
-  
+
+  // Report PDF polling states
+  const [reportUrl, setReportUrl] = useState<string>('');
+  const [reportStatus, setReportStatus] = useState<'polling' | 'ready' | 'timeout'>('polling');
+  const reportPollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Checklist dynamic states
   const [checklist, setChecklist] = useState<Array<{ id: number; text: string; done: boolean }>>([]);
 
@@ -520,22 +525,68 @@ export const SummaryPage: React.FC = () => {
     fetchSessionDetails();
   }, [sessionIdParam]);
 
+  // ── Report PDF polling ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!sessionIdParam) return;
+
+    const MAX_POLL_MS = 3 * 60 * 1000; // 3 minutes
+    const POLL_INTERVAL_MS = 3000;     // poll every 3 seconds
+    const startTime = Date.now();
+
+    const poll = async () => {
+      try {
+        const status = await api.getReportStatus(sessionIdParam);
+        if (status.ready && status.url) {
+          setReportUrl(status.url);
+          setReportStatus('ready');
+          if (reportPollRef.current) clearInterval(reportPollRef.current);
+          return;
+        }
+      } catch {
+        // silently retry
+      }
+      if (Date.now() - startTime > MAX_POLL_MS) {
+        setReportStatus('timeout');
+        if (reportPollRef.current) clearInterval(reportPollRef.current);
+      }
+    };
+
+    // Run once immediately, then on interval
+    poll();
+    reportPollRef.current = setInterval(poll, POLL_INTERVAL_MS);
+
+    return () => {
+      if (reportPollRef.current) clearInterval(reportPollRef.current);
+    };
+  }, [sessionIdParam]);
+
   const toggleCheck = (id: number) => {
     setChecklist(prev => prev.map(item => item.id === id ? { ...item, done: !item.done } : item));
   };
 
   const handleDownload = async () => {
+    if (reportStatus === 'ready' && reportUrl) {
+      window.open(reportUrl, '_blank');
+      return;
+    }
+    if (reportStatus === 'timeout') {
+      alert('Report generation timed out. Please try refreshing or contact support.');
+      return;
+    }
+    // Still polling — try one more time immediately
     if (!sessionIdParam) return;
     try {
-      const res = await api.getSessionReportUrl(sessionIdParam);
-      if (res && res.url) {
-        window.open(res.url, '_blank');
+      const status = await api.getReportStatus(sessionIdParam);
+      if (status.ready && status.url) {
+        setReportUrl(status.url);
+        setReportStatus('ready');
+        window.open(status.url, '_blank');
       } else {
-        alert('Your PDF report is still being compiled by the backend worker. Please try again in a few seconds!');
+        alert('⏳ Your PDF report is still being compiled. It should be ready in a few seconds — please try again shortly.');
       }
     } catch (err) {
-      console.error('Failed to download PDF report', err);
-      alert('Failed to obtain PDF download link. Please try again.');
+      console.error('Failed to check report status', err);
+      alert('Failed to check report status. Please try again.');
     }
   };
 
@@ -1018,9 +1069,33 @@ export const SummaryPage: React.FC = () => {
               </button>
               <button 
                 onClick={handleDownload}
-                className="w-full sm:w-auto px-10 py-4 bg-primary text-white font-bold rounded-full bouncy shadow-md hover:brightness-110 transition-all text-sm"
+                disabled={reportStatus === 'polling'}
+                className={`w-full sm:w-auto px-10 py-4 font-bold rounded-full bouncy shadow-md transition-all text-sm flex items-center justify-center gap-2 ${
+                  reportStatus === 'ready'
+                    ? 'bg-primary text-white hover:brightness-110'
+                    : reportStatus === 'timeout'
+                    ? 'bg-error/80 text-white hover:brightness-110'
+                    : 'bg-surface-container text-on-surface-variant cursor-wait opacity-70'
+                }`}
               >
-                Download PDF Review
+                {reportStatus === 'ready' && (
+                  <>
+                    <span className="material-symbols-outlined text-base">download</span>
+                    Download PDF Review
+                  </>
+                )}
+                {reportStatus === 'polling' && (
+                  <>
+                    <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />
+                    Compiling Report…
+                  </>
+                )}
+                {reportStatus === 'timeout' && (
+                  <>
+                    <span className="material-symbols-outlined text-base">warning</span>
+                    Report Unavailable
+                  </>
+                )}
               </button>
             </div>
 

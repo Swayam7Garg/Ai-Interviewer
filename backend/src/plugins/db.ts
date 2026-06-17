@@ -456,7 +456,7 @@ async function dbPlugin(fastify: FastifyInstance) {
   
   const pool = new pg.Pool({
     connectionString,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 10000,
   });
 
   let activeDb: pg.Pool | MockPool;

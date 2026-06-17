@@ -72,6 +72,8 @@ export const SessionPage: React.FC = () => {
   const lastWarningTimeRef = useRef(0);
   const maxMovementWarningsRef = useRef(DEFAULT_MAX_WARNINGS);
   const webcamStreamRef = useRef<MediaStream | null>(null);
+  // Throttle: only run pixel-diff motion check every 500ms (not every detection tick)
+  const lastMotionCheckRef = useRef<number>(0);
 
   // ── Interview State ───────────────────────────────────────────────────────
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
@@ -255,6 +257,10 @@ export const SessionPage: React.FC = () => {
 
       // Draw current frame for motion analysis
       if (motionCanvas) {
+        const nowMs = Date.now();
+        const MOTION_THROTTLE_MS = 500; // Only diff frames every 500ms
+        const shouldCheckMotion = nowMs - lastMotionCheckRef.current >= MOTION_THROTTLE_MS;
+
         motionCanvas.width = video.videoWidth;
         motionCanvas.height = video.videoHeight;
         const mctx = motionCanvas.getContext('2d');
@@ -262,8 +268,9 @@ export const SessionPage: React.FC = () => {
           mctx.drawImage(video, 0, 0);
           const currentFrame = mctx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
 
-          // ── Motion detection via pixel diff (debounced + cooldown) ────────
-          if (prevFrameRef.current && prevFrameRef.current.data.length === currentFrame.data.length) {
+          // ── Motion detection via pixel diff (throttled + debounced + cooldown) ──
+          if (shouldCheckMotion && prevFrameRef.current && prevFrameRef.current.data.length === currentFrame.data.length) {
+            lastMotionCheckRef.current = nowMs;
             let diffCount = 0;
             const step = 4 * 12; // sample every 12th pixel (was 8) → less sensitive
             const totalSamples = currentFrame.data.length / step;
@@ -311,7 +318,10 @@ export const SessionPage: React.FC = () => {
               });
             }
           }
-          prevFrameRef.current = currentFrame;
+
+          if (shouldCheckMotion || !prevFrameRef.current) {
+            prevFrameRef.current = currentFrame;
+          }
         }
       }
 

@@ -12,8 +12,7 @@ async function redisPlugin(fastify: FastifyInstance) {
   const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
   const redis = new Redis(redisUrl, {
     maxRetriesPerRequest: null,
-    enableOfflineQueue: false,
-    lazyConnect: true,
+    enableOfflineQueue: true,
     retryStrategy: (times) => {
       // Exponential backoff: max 60 seconds between retries
       return Math.min(times * 2000, 60000);

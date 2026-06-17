@@ -315,6 +315,15 @@ export const api = {
     }
   },
 
+  async getReportStatus(sessionId: string): Promise<{ ready: boolean; url?: string; message: string }> {
+    try {
+      return await request<{ ready: boolean; url?: string; message: string }>(`/sessions/${sessionId}/report/status`);
+    } catch (err) {
+      console.warn('API error fetching report status', err);
+      return { ready: false, message: 'Unable to check report status.' };
+    }
+  },
+
   async getAiReportSummary(sessionId: string): Promise<{ executive_summary: string, action_plan: string[] }> {
     try {
       return await request<{ executive_summary: string, action_plan: string[] }>(`/sessions/${sessionId}/ai-summary`);

@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import logging
 import google.generativeai as genai
 
@@ -16,7 +17,7 @@ is_mock = not use_groq and not use_gemini
 
 # Models
 FAST_MODEL_NAME = "gemini-2.0-flash"
-QUALITY_MODEL_NAME = "gemini-1.5-flash"
+QUALITY_MODEL_NAME = "gemini-2.5-flash"
 
 model = None
 fast_model = None
@@ -50,12 +51,44 @@ if use_gemini:
 if is_mock:
     logger.warning("No valid LLM API Key set. Running in MOCK Mode.")
 
+
+def _is_rate_limit_error(e: Exception) -> bool:
+    """Check if the exception is a rate limit (429) error."""
+    err_str = str(e).lower()
+    return "429" in err_str or "rate limit" in err_str or "rate_limit" in err_str or "ratelimit" in err_str
+
+
+def _groq_call_with_retry(call_fn, max_retries: int = 3, base_delay: float = 1.5):
+    """
+    Execute a Groq API call with exponential backoff retry on rate limit errors.
+    call_fn: a zero-argument callable that makes the Groq API call.
+    Returns the result of call_fn().
+    Raises the last exception if all retries fail.
+    """
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return call_fn()
+        except Exception as e:
+            last_exc = e
+            if _is_rate_limit_error(e):
+                wait_time = base_delay * (2 ** attempt)  # 1.5s, 3s, 6s
+                logger.warning(f"Groq rate limit hit (attempt {attempt + 1}/{max_retries}). Retrying in {wait_time:.1f}s...")
+                time.sleep(wait_time)
+            else:
+                # Non-rate-limit errors: raise immediately
+                raise
+    logger.error(f"All {max_retries} Groq retry attempts exhausted.")
+    raise last_exc
+
+
 def get_model():
     return fast_model or model
 
 def run_llm_stream(prompt: str, use_fast: bool = True):
     """
     Generator yielding text chunks from Gemini or Groq streaming API.
+    Includes retry logic for rate limit errors on non-streaming calls.
     """
     if is_mock or not (use_groq or use_gemini):
         mock_text = "STRENGTH:\nDemonstrated strong domain logic and structured reasoning.\n\nWEAKNESS:\nLacked specific metrics to quantify system improvement outcomes.\n\nIMPROVEMENT:\nInclude explicit performance statistics like CPU or latency overhead."
@@ -65,21 +98,33 @@ def run_llm_stream(prompt: str, use_fast: bool = True):
 
     # --- GROQ STREAMING ---
     if use_groq and groq_client:
-        active_model = "llama-3.1-8b-instant" if use_fast else "llama-3.3-70b-specdec"
-        try:
-            completion = groq_client.chat.completions.create(
-                model=active_model,
-                messages=[{"role": "user", "content": prompt}],
-                stream=True,
-                temperature=0.3,
-            )
-            for chunk in completion:
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
-        except Exception as e:
-            logger.error(f"Groq stream error: {e}")
-            yield f"Error generating feedback: {str(e)}"
+        active_model = "llama-3.1-8b-instant" if use_fast else "llama-3.3-70b-versatile"
+        last_exc = None
+        for attempt in range(3):
+            try:
+                completion = groq_client.chat.completions.create(
+                    model=active_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=True,
+                    temperature=0.3,
+                )
+                for chunk in completion:
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        yield delta
+                return  # Success
+            except Exception as e:
+                last_exc = e
+                if _is_rate_limit_error(e):
+                    wait_time = 1.5 * (2 ** attempt)
+                    logger.warning(f"Groq stream rate limit (attempt {attempt + 1}/3). Retrying in {wait_time:.1f}s...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"Groq stream error: {e}")
+                    yield f"Error generating feedback: {str(e)}"
+                    return
+        logger.error(f"Groq stream failed after all retries: {last_exc}")
+        yield f"Error generating feedback: {str(last_exc)}"
         return
 
     # --- GEMINI STREAMING ---
@@ -97,6 +142,7 @@ def run_llm_stream(prompt: str, use_fast: bool = True):
 def run_gemini_json(prompt: str, generation_config: dict = None, use_fast: bool = False) -> dict:
     """
     Runs an LLM request (Gemini or Groq) and returns parsed JSON.
+    Includes exponential backoff retries for Groq rate limit errors.
     use_fast=True uses gemini-2.0-flash or llama-3.1-8b-instant
     use_fast=False uses gemini-1.5-flash or llama-3.3-70b-specdec
     """
@@ -148,28 +194,44 @@ def run_gemini_json(prompt: str, generation_config: dict = None, use_fast: bool 
                 "ideal_answer_skeleton": "State the metric regression → profiling tool → individual changes → final latency stats."
             }
 
-    try:
-        config = generation_config or {"temperature": 0.3}
+    config = generation_config or {"temperature": 0.3}
 
-        # --- GROQ ENGINE ---
-        if use_groq and groq_client:
-            active_model = "llama-3.1-8b-instant" if use_fast else "llama-3.3-70b-specdec"
+    # --- GROQ ENGINE with retry ---
+    if use_groq and groq_client:
+        active_model = "llama-3.1-8b-instant" if use_fast else "llama-3.3-70b-versatile"
+
+        def groq_call():
             completion = groq_client.chat.completions.create(
                 model=active_model,
                 messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a precise JSON generator. Always respond with valid JSON only. No markdown, no extra text."
+                    },
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
                 temperature=config.get("temperature", 0.3),
+                max_tokens=2048,
             )
             text = completion.choices[0].message.content.strip()
+            # Strip any accidental markdown wrapping
             if text.startswith("```json"):
                 text = text[7:]
+            if text.startswith("```"):
+                text = text[3:]
             if text.endswith("```"):
                 text = text[:-3]
             return json.loads(text.strip())
 
-        # --- GEMINI ENGINE ---
+        try:
+            return _groq_call_with_retry(groq_call, max_retries=3, base_delay=1.5)
+        except Exception as e:
+            logger.error(f"Groq JSON call failed after retries: {e}")
+            return {"error": "LLM API call failed", "message": str(e)}
+
+    # --- GEMINI ENGINE ---
+    try:
         active_model = fast_model if use_fast else model
         if "response_mime_type" in config and config["response_mime_type"] == "application/json":
             response = active_model.generate_content(

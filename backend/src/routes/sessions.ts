@@ -640,6 +640,38 @@ startxref
     }
   });
 
+  // GET /:id/report/status — lightweight polling endpoint to check if PDF is ready
+  fastify.get('/:id/report/status', async (request, reply) => {
+    const { id: sessionId } = request.params as { id: string };
+    const userId = (request.user as any).sub;
+
+    const sessionRes = await fastify.db.query(
+      'SELECT "reportS3Key", "endedAt" FROM "Session" WHERE id = $1 AND "userId" = $2',
+      [sessionId, userId]
+    );
+
+    if (sessionRes.rowCount === 0) {
+      return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
+    }
+
+    const session = sessionRes.rows[0];
+    const hasReport = Boolean(session.reportS3Key);
+
+    if (!hasReport) {
+      // Report still being compiled by the PDF worker
+      return { ready: false, message: 'PDF report is still being compiled. Check back in a few seconds.' };
+    }
+
+    // Try to get the signed URL to confirm file actually exists
+    try {
+      const url = await fastify.storage.getPresignedUrl(session.reportS3Key);
+      return { ready: true, url, message: 'Report is ready for download.' };
+    } catch (err) {
+      fastify.log.warn(err, 'reportS3Key set but file not accessible yet');
+      return { ready: false, message: 'Report file is still being uploaded. Please wait a moment.' };
+    }
+  });
+
   // GET /:id/ai-summary
   fastify.get('/:id/ai-summary', async (request, reply) => {
     const { id: sessionId } = request.params as { id: string };
