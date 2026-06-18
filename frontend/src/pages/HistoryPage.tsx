@@ -108,7 +108,7 @@ export const HistoryPage: React.FC = () => {
           <div className="flex items-center gap-2 px-6 py-3 bg-surface rounded-full shadow-sm border border-outline/10 text-sm">
             <span className="material-symbols-outlined text-secondary">work</span>
             <select 
-              className="bg-transparent border-none focus:ring-0 font-medium text-on-surface cursor-pointer outline-none"
+              className="bg-surface-container text-on-surface border border-outline/20 rounded-full px-3 py-1.5 focus:ring-2 focus:ring-primary font-medium cursor-pointer outline-none"
               value={selectedRole}
               onChange={(e) => setSelectedRole(e.target.value)}
             >
@@ -122,7 +122,7 @@ export const HistoryPage: React.FC = () => {
           <div className="flex items-center gap-2 px-6 py-3 bg-surface rounded-full shadow-sm border border-outline/10 text-sm">
             <span className="material-symbols-outlined text-tertiary">psychology</span>
             <select 
-              className="bg-transparent border-none focus:ring-0 font-medium text-on-surface cursor-pointer outline-none"
+              className="bg-surface-container text-on-surface border border-outline/20 rounded-full px-3 py-1.5 focus:ring-2 focus:ring-primary font-medium cursor-pointer outline-none"
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
             >

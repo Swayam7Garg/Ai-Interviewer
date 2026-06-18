@@ -46,6 +46,8 @@ export const DashboardPage: React.FC = () => {
     navigate('/login');
   };
 
+  const latestSessionId = stats?.recentSessions?.[0]?.id;
+
 
   // Render dummy data or skeletons if stats is not loaded yet
   const activeStats: SessionStats = stats || {
@@ -95,7 +97,7 @@ export const DashboardPage: React.FC = () => {
             <span className="text-sm font-medium">History</span>
           </button>
           <button 
-            onClick={() => navigate('/summary')}
+            onClick={() => latestSessionId ? navigate(`/summary?sessionId=${latestSessionId}`) : navigate('/summary')}
             className="w-full flex items-center gap-3 text-on-surface-variant hover:text-on-surface rounded-full px-4 py-3 transition-all duration-200 hover:scale-[1.03] hover:bg-surface-container text-left"
           >
             <span className="material-symbols-outlined">description</span>
@@ -162,7 +164,7 @@ export const DashboardPage: React.FC = () => {
             </div>
 
             <div 
-              onClick={() => navigate('/summary')}
+              onClick={() => latestSessionId ? navigate(`/summary?sessionId=${latestSessionId}`) : navigate('/summary')}
               className="bg-surface border border-white/5 p-6 rounded-2xl celestial-shadow bouncy-hover cursor-pointer"
             >
               <div className="flex justify-between items-start mb-2">
