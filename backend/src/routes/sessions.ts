@@ -79,6 +79,7 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
           previous_questions: [],
           chat_history: [],  // Empty for first question
           selected_domain: data.selectedDomain || null,
+          adaptive_mode: data.adaptiveMode || false,
         }),
       });
 

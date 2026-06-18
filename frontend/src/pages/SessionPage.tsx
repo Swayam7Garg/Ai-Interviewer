@@ -141,7 +141,13 @@ export const SessionPage: React.FC = () => {
   useEffect(() => {
     if (!sessionStarted || !isProctoringEnabled) return;
 
+    let active = false;
+    const delayTimer = setTimeout(() => {
+      active = true;
+    }, 4000); // 4 seconds delay to allow camera permission prompt focus issues to resolve
+
     const handleViolation = (reason: string) => {
+      if (!active) return;
       const now = Date.now();
       if (now - lastFocusLossRef.current < 5000) return; // Limit to once every 5 seconds
       lastFocusLossRef.current = now;
@@ -178,6 +184,7 @@ export const SessionPage: React.FC = () => {
     window.addEventListener('blur', handleBlur);
 
     return () => {
+      clearTimeout(delayTimer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
     };
@@ -559,6 +566,8 @@ export const SessionPage: React.FC = () => {
     };
 
     rec.onend = () => {
+      // Save what we have so far back into stableTextRef before restarting
+      stableTextRef.current = responseTextRef.current;
       // Auto-restart if we're still supposed to be listening
       if (isListeningRef.current) {
         setTimeout(startListening, 200);

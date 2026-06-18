@@ -307,7 +307,8 @@ def get_question_generation_prompt(
     if is_first_question:
         task_block = (
             "Since this is the first question: greet the candidate in exactly ONE short sentence, "
-            "then immediately ask your first domain-specific question. Do NOT give a long introduction."
+            "then immediately ask your first domain-specific question. Do NOT ask them to introduce themselves, "
+            "and do NOT ask about their project or background. Ask a domain-specific question immediately."
         )
     else:
         task_block = (
