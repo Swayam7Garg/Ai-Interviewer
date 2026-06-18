@@ -206,10 +206,17 @@ Scoring is mapped to a 100-point scale across six distinct sub-metrics:
 - **Conciseness (0-5)**: Evaluates the length efficiency, penalizing rambling and empty responses.
 
 ### 4.4 Tools and Frameworks Used
-- **google-generativeai**: SDK for running low-latency Gemini Flash and Pro queries.
-- **groq-sdk**: Client for running Llama 3.1 and 3.3 models with high-throughput response speeds.
-- **reportlab**: Python PDF generation library used to programmatically draw report canvas elements.
-- **TensorFlow.js & BlazeFace**: Client-side machine learning library for real-time face boundary estimation.
+The implementation of TechPrep AI leverages a modern, highly decoupled technology stack spanning client-side computer vision, real-time web speech processing, high-performance web servers, and state-of-the-art Large Language Model APIs. Below is a detailed reference of the tools, frameworks, and packages employed:
+- **React (v18+) & TypeScript**: Renders the single-page application (SPA). Type safety ensures robust contracts between component states, and hooks manage local proctoring and SpeechRecognition lifecycle events.
+- **Vite**: Serves as the front-end bundler. Vite offers instant Hot Module Replacement (HMR) and uses esbuild to compile assets, achieving sub-second build times compared to legacy systems.
+- **TensorFlow.js & BlazeFace**: Runs client-side face detection. BlazeFace is a lightweight convolutional neural network (CNN) optimized for mobile and desktop browsers, estimating 6 facial landmarks (eyes, nose, ears, mouth) to calculate the user's attention angle.
+- **Web Speech API (SpeechRecognition & SpeechSynthesis)**: Enables hands-free verbal interaction. It converts microphone input into real-time transcript streams and reads questions aloud using natural-sounding browser voice engines.
+- **Fastify**: High-throughput Node.js framework serving as the REST API gateway. Fastify is chosen for its low-overhead architecture and built-in schema serialization, delivering double the throughput of standard Express applications.
+- **Prisma ORM & PostgreSQL**: Facilitates database modeling. PostgreSQL (Supabase) acts as the relational storage layer, while Prisma provides a type-safe interface for managing transactional tables and entity relations.
+- **Upstash Redis**: Serves as a distributed serverless cache to manage transient log queues, proctoring limits, and token-bucket rate limits.
+- **FastAPI (Python ASGI)**: Powers the AI microservice. FastAPI is built on Starlette and Pydantic, providing asynchronous execution, automatic validation of JSON request schemas, and high-performance network routing.
+- **Google Generative AI & Groq SDKs**: Interfaces with Gemini 2.0/2.5 Flash and Llama 3.1 models. These SDKs query models for domain-specific question generation, STAR structure grading, and live SSE feedback streams.
+- **ReportLab**: Programmatic PDF compilation library drawing complex vector canvas elements, tabular reports, and formatted summaries to compile candidate performance results.
 
 ---
 
