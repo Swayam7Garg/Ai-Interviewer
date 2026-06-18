@@ -2,6 +2,112 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import crypto from 'crypto';
 
+const ROLE_DOMAINS: Record<string, string[]> = {
+  'Senior Frontend Engineer': ['React & Component Architecture', 'State Management', 'Browser Rendering & Performance', 'CSS & Animations', 'Testing & Tooling'],
+  'Backend SDE': ['System Design & Scalability', 'Database Design', 'API Design', 'Caching Strategies', 'Concurrency & Microservices'],
+  'Full Stack SDE': ['End-to-End Architecture', 'REST API Design', 'Database Selection', 'Authentication Flows', 'Deployment & DevOps'],
+  'ML Engineer': ['Model Selection & Evaluation', 'Feature Engineering', 'Training Pipeline Design', 'MLOps & Deployment', 'NLP & Deep Learning'],
+  'Data Scientist': ['Statistical Foundations', 'Exploratory Data Analysis', 'A/B Testing', 'Python Data Stack', 'Business Communication'],
+  'Java Developer': ['JVM Internals & GC', 'Spring Boot & Security', 'Concurrency', 'Design Patterns', 'JPA & Hibernate'],
+  'Mobile Engineer': ['React Native / Flutter', 'App Performance', 'State Management Mobile', 'App Store Deployment', 'Offline-first Patterns'],
+  'Product Manager': ['Product Strategy', 'User Research', 'Metrics & OKRs', 'Stakeholder Management', 'A/B Testing & Data'],
+};
+
+const FALLBACK_ROLE_DOMAINS = ['System Design & Scalability', 'Database Design', 'API Design', 'Caching Strategies', 'Concurrency & Microservices'];
+
+function getRoleDomains(role: string): string[] {
+  return ROLE_DOMAINS[role] || FALLBACK_ROLE_DOMAINS;
+}
+
+function getNextDomain(role: string, selectedDomain?: string, questionIndex = 0): string {
+  const domains = getRoleDomains(role);
+  if (selectedDomain && selectedDomain.trim() && selectedDomain.toLowerCase() !== 'all domains') {
+    const matched = domains.find((d) => d.toLowerCase() === selectedDomain.toLowerCase());
+    if (matched) return matched;
+  }
+  return domains[questionIndex % domains.length];
+}
+
+function buildFallbackQuestion(role: string, selectedDomain?: string, questionIndex = 0): string {
+  const domain = getNextDomain(role, selectedDomain, questionIndex);
+  const domainLower = domain.toLowerCase();
+
+  if (domainLower.includes('system design') || domainLower.includes('scalability')) {
+    return `[${domain}] Design a rate limiter for a public API gateway. How would you handle distributed state across multiple server nodes?`;
+  }
+  if (domainLower.includes('database')) {
+    return `[${domain}] You are seeing slow queries on a heavily read table. How would you diagnose the issue and optimize the schema or indexes?`;
+  }
+  if (domainLower.includes('api design')) {
+    return `[${domain}] You need to design an API for a real-time collaborative product. How would you choose between REST, WebSockets, GraphQL, or gRPC?`;
+  }
+  if (domainLower.includes('caching')) {
+    return `[${domain}] Your application is hitting cache stampede under peak load. How would you design the cache layer and TTL strategy to stabilize it?`;
+  }
+  if (domainLower.includes('concurrency')) {
+    return `[${domain}] Explain how you would safely share state across concurrent workers or threads in production. How would you avoid deadlocks and race conditions?`;
+  }
+  if (domainLower.includes('react') || domainLower.includes('frontend') || domainLower.includes('rendering')) {
+    return `[${domain}] How would you optimize a complex UI to reduce unnecessary re-renders and keep the browser rendering pipeline smooth?`;
+  }
+  if (domainLower.includes('spring') || domainLower.includes('java') || domainLower.includes('jvm') || domainLower.includes('hibernate')) {
+    return `[${domain}] Walk me through a real production problem you solved in this area. What trade-offs did you make and why?`;
+  }
+  if (domainLower.includes('ml') || domainLower.includes('model') || domainLower.includes('deep learning') || domainLower.includes('transformer')) {
+    return `[${domain}] How would you move a model from experimentation to production while handling monitoring, drift, and latency?`;
+  }
+  if (domainLower.includes('product')) {
+    return `[${domain}] You have limited engineering capacity and multiple stakeholders asking for work. How would you prioritize the roadmap and justify the decision?`;
+  }
+
+  return `[${domain}] Can you walk me through a production scenario where you used this area and explain the trade-offs you considered?`;
+}
+
+function buildFallbackScore(answerText: string): any {
+  const cleaned = answerText.trim().toLowerCase();
+  const words = cleaned ? cleaned.split(/\s+/).filter(Boolean) : [];
+  const wordCount = words.length;
+  const keywordMatches = ['design', 'system', 'api', 'database', 'cache', 'performance', 'optimize', 'concurrency', 'spring', 'react', 'java', 'docker', 'security']
+    .filter((kw) => cleaned.includes(kw)).length;
+
+  const starScore = Math.min(25, 4 + wordCount / 12);
+  const techDepthScore = Math.min(25, 4 + wordCount / 18 + keywordMatches * 1.5);
+  const commScore = Math.min(20, 8 + wordCount / 25);
+  const relevanceScore = Math.min(15, 4 + wordCount / 35);
+  const confidenceScore = Math.min(10, 5 + (cleaned.includes('i think') ? -1 : 1));
+  const concisenessScore = wordCount >= 100 && wordCount <= 400 ? 5 : wordCount >= 40 ? 3 : 1;
+
+  const overallScore = Math.max(
+    0,
+    Math.min(100, starScore + techDepthScore + commScore + relevanceScore + confidenceScore + concisenessScore)
+  );
+
+  return {
+    star_score: Math.round(starScore * 10) / 10,
+    tech_depth_score: Math.round(techDepthScore * 10) / 10,
+    comm_score: Math.round(commScore * 10) / 10,
+    relevance_score: Math.round(relevanceScore * 10) / 10,
+    confidence_score: Math.round(confidenceScore * 10) / 10,
+    conciseness_score: Math.round(concisenessScore * 10) / 10,
+    overall_score: Math.round(overallScore * 10) / 10,
+    star_feedback: {
+      situation: 'The answer should clearly set up the context of the problem.',
+      task: 'State your own responsibility and what had to be solved.',
+      action: 'Describe the exact actions you took using I, not we.',
+      result: 'End with measurable impact, trade-offs, or outcome.'
+    },
+    top_strength: wordCount > 50 ? 'The response had some structure and relevant content.' : 'The response was short but stayed on topic.',
+    top_weakness: keywordMatches < 2 ? 'It needs more concrete technical detail and production-specific reasoning.' : 'It should be more specific about implementation choices and results.',
+    filler_words: ['like', 'actually', 'basically'].filter((w) => cleaned.includes(w)),
+    ideal_answer_skeleton: 'Set context -> define your responsibility -> explain technical actions -> conclude with impact.',
+    ideal_answer_outline: 'Explain the scenario, name the architecture or tools, discuss trade-offs, and close with measurable results.',
+    what_was_correct: wordCount > 0 ? ['Addressed the question at a high level.'] : [],
+    technical_errors: [],
+    key_concepts_missed: ['Specific implementation details', 'Measured outcome or production impact'],
+    interviewer_correction: 'Your answer is directionally fine, but in a real interview we need more concrete technical detail. Name the system choices you made, explain why you made them, and finish with the result.'
+  };
+}
+
 const StartSessionSchema = z.object({
   role: z.string(),
   interviewType: z.enum(['behavioural', 'technical', 'resume_based']),
@@ -60,7 +166,7 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
 
     // Call AI service to generate the first question
     const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-    let questionText = `Hello! I am your interviewer today. Let's dive right in. Can you start by introducing yourself and telling me what draws you to the ${data.role} role?`;
+    let questionText = buildFallbackQuestion(data.role, data.selectedDomain, 0);
     let questionType = data.interviewType;
     let difficulty = 'easy';
     let followUpHint = 'Ask them to elaborate on their most relevant technical experience.';
@@ -70,7 +176,7 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
       const response = await fetch(`${aiServiceUrl}/ai/generate-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(15000), // 15s timeout — fail fast to fallback
+        signal: AbortSignal.timeout(45000), // allow time for cold starts after inactivity
         body: JSON.stringify({
           role: data.role,
           interview_type: data.interviewType,
@@ -170,25 +276,7 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
       }
     } catch (err) {
       fastify.log.error(err, 'AI Scorer offline. Using mock fallback score.');
-      scoreData = {
-        star_score: 18.0,
-        tech_depth_score: 16.0,
-        comm_score: 15.0,
-        relevance_score: 12.0,
-        confidence_score: 8.0,
-        conciseness_score: 4.0,
-        overall_score: 73.0,
-        star_feedback: {
-          situation: 'Explained the scenario clearly.',
-          task: 'Defined the core problem statement.',
-          action: 'Implemented the solution but could emphasize individual contributions more.',
-          result: 'Achieved good metrics, but could quantify the outcomes.',
-        },
-        top_strength: 'Great communication and relevance to the problem.',
-        top_weakness: 'Lacked depth in technical implementation details.',
-        filler_words: ['like', 'actually'],
-        ideal_answer_skeleton: 'Start with the scale of the system, mention the algorithm, detail personal action, and end with % improvement.',
-      };
+      scoreData = buildFallbackScore(answerText);
     }
 
     // Save answer to database
@@ -236,7 +324,7 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
       let nextQuestion = null;
 
       if (currentQuestionCount < MAX_QUESTIONS) {
-        let nextQuestionText = 'Can you walk me through another challenging project you worked on recently?';
+        let nextQuestionText = buildFallbackQuestion(session.role, session.selectedDomain || undefined, currentQuestionCount);
         let nextQuestionType = session.interviewType;
         let nextDifficulty = 'medium';
         let nextFollowUpHint = 'Probe for concrete results and individual ownership.';
@@ -296,7 +384,7 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
             briefAcknowledgment = qData.brief_acknowledgment || '';  // Nia's contextual reply
           }
         } catch (err) {
-          fastify.log.error(err, 'Failed to fetch next question. Using fallback.');
+          fastify.log.error(err, 'Failed to fetch next question. Using domain-specific fallback.');
         }
 
         const nextQuestionId = crypto.randomUUID();
@@ -839,7 +927,7 @@ startxref
       const response = await fetch(`${aiServiceUrl}/ai/generate-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(45000),
         body: JSON.stringify({
           role: session.role,
           interview_type: session.interviewType,
