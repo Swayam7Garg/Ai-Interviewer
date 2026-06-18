@@ -239,6 +239,136 @@ Keep tone: direct coach, not cheerleader. No filler phrases like "Great job!" or
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
+def generate_heuristic_report(sd: dict) -> dict:
+    role = sd.get("role", "Software Engineer")
+    itype = sd.get("interview_type", "technical")
+    score = sd.get("overall_score", 70.0)
+    dim_avgs = sd.get("dimension_averages", {}) or {}
+    
+    # Calculate verdict
+    if score >= 90:
+        verdict = "Excellent"
+    elif score >= 80:
+        verdict = "Strong"
+    elif score >= 70:
+        verdict = "Moderate"
+    elif score >= 50:
+        verdict = "Developing"
+    else:
+        verdict = "Needs Focus"
+        
+    # Find strongest and weakest dimensions based on averages
+    # max marks: star(25), techDepth(25), comm(20), relevance(15), confidence(10), conciseness(5)
+    normalized_dims = {}
+    max_scores = {"star": 25, "techDepth": 25, "comm": 20, "relevance": 15, "confidence": 10, "conciseness": 5}
+    for k, max_val in max_scores.items():
+        val = dim_avgs.get(k, 0)
+        normalized_dims[k] = (val / max_val) * 100 if max_val > 0 else 0
+        
+    # Sort dimensions by performance
+    sorted_dims = sorted(normalized_dims.items(), key=lambda x: x[1])
+    
+    weakest_dim = sorted_dims[0][0] if sorted_dims else "techDepth"
+    strongest_dim = sorted_dims[-1][0] if sorted_dims else "comm"
+    
+    dim_display_names = {
+        "star": "STAR Behavioral Structure",
+        "techDepth": "Technical Depth & Algorithm Design",
+        "comm": "Verbal Communication Clarity",
+        "relevance": "Constraint Relevance & Focus",
+        "confidence": "Assertiveness & Presence",
+        "conciseness": "Conciseness & Precision"
+    }
+    
+    strongest_name = dim_display_names.get(strongest_dim, "Technical reasoning")
+    weakest_name = dim_display_names.get(weakest_dim, "Behavioral structure")
+    
+    # Build executive summary
+    exec_summary = (
+        f"The candidate demonstrated a {verdict.lower()} performance with an overall evaluated score of {round(score, 1)}/100 "
+        f"for the {role} role in a {itype} interview. "
+        f"Their primary strength was in {strongest_name}, showcasing structured logic and domain relevance. "
+        f"However, key areas for growth were identified in {weakest_name}, where further practice will help align responses to industry benchmarks."
+    )
+    
+    # Build 5 specific actions
+    actions_pool = {
+        "star": [
+            "Structure answers strictly with the STAR framework, detailing the exact bottleneck in Situation.",
+            "Formulate Action sections around individual contributions rather than team-level tasks.",
+            "Quantify results by adding explicit percentages, latency drops, or dollar impacts.",
+            "Practice the STAR Method Coach lessons on behavioral storytelling.",
+            "Limit the initial background explanation to 45 seconds to leave room for the results."
+        ],
+        "techDepth": [
+            "Explain algorithmic time and space complexities (Big O) explicitly during architecture design.",
+            "Detail database schema designs, indexing strategies, and transaction isolation tradeoffs.",
+            "Practice system design concepts including load balancers, rate limiting, and database sharding.",
+            "Review core language fundamentals (e.g. JVM garbage collection or Java concurrency).",
+            "Discuss caching configuration parameters (e.g. Redis eviction policies) explicitly."
+        ],
+        "comm": [
+            "Pace your verbal delivery by eliminating filler words like 'basically', 'actually', or 'like'.",
+            "Speak assertively with confident tone modulation to command technical authority.",
+            "Organize responses into clear bullet points: 'First, I did X... Second, I did Y...'.",
+            "Record audio of your practice answers to audit filler word counts.",
+            "Avoid trailing off at the end of sentences; finish with a summary of the outcome."
+        ],
+        "relevance": [
+            "Anchor answers directly to the constraints and parameters specified in the prompt.",
+            "Avoid introducing unrelated technologies; stick to solving the immediate problem.",
+            "Restate the interviewer's question briefly at the start to ensure alignment.",
+            "Highlight trade-offs specifically related to the given problem scale.",
+            "Ask clarifying questions to narrow down the system requirements."
+        ],
+        "confidence": [
+            "Maintain steady volume and pace to convey professional credibility.",
+            "Answer questions directly before deep-diving into execution details.",
+            "State your design decisions clearly without over-qualifying statements.",
+            "Minimize hesitation pauses by outlining your answer structure in your head first.",
+            "Acknowledge edge cases transparently and discuss how you would address them."
+        ],
+        "conciseness": [
+            "Limit responses to under 200 words to maintain high engagement and density.",
+            "Avoid repeating details that were already mentioned in the summary.",
+            "State the final result first, then outline the timeline if asked.",
+            "Practice summarization exercises to distill technical features into single sentences.",
+            "Stop speaking once you have answered the prompt; avoid rambling."
+        ]
+    }
+    
+    # Select actions based on weakest dimensions
+    action_plan = []
+    
+    # Add 2 from weakest, 2 from second weakest, and 1 from third weakest
+    try:
+        w1 = sorted_dims[0][0]
+        action_plan.extend(actions_pool.get(w1, [])[:2])
+    except:
+        pass
+        
+    try:
+        w2 = sorted_dims[1][0]
+        action_plan.extend(actions_pool.get(w2, [])[:2])
+    except:
+        pass
+        
+    try:
+        w3 = sorted_dims[2][0]
+        action_plan.extend(actions_pool.get(w3, [])[:1])
+    except:
+        pass
+        
+    # Fallback to general actions if we don't have enough
+    while len(action_plan) < 5:
+        action_plan.append("Practice structural drills using the STAR framework to organize answers.")
+        
+    return {
+        "executive_summary": exec_summary,
+        "action_plan": action_plan[:5]
+    }
+
+
 @router.post("/report-summary", response_model=ReportSummaryResponse)
 async def report_summary(request: ReportSummaryRequest):
     """
@@ -281,10 +411,13 @@ Return ONLY valid JSON:
             generation_config={"temperature": 0.3, "response_mime_type": "application/json"},
             use_fast=False  # Quality model for comprehensive report
         )
+        if not report_data or "executive_summary" not in report_data or "action_plan" not in report_data or "error" in report_data:
+            raise ValueError("Invalid report summary format or LLM client error")
         return report_data
     except Exception as e:
-        logger.error(f"Error generating report summary: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate report summary")
+        logger.error(f"Error generating report summary or fallback triggered: {e}. Generating dynamic local heuristic summary.")
+        heuristic_data = generate_heuristic_report(sd)
+        return heuristic_data
 
 
 from pydantic import BaseModel

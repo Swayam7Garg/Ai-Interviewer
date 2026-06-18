@@ -1343,30 +1343,35 @@ export const SessionPage: React.FC = () => {
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Chat history overlay (voice mode) */}
-          {isVoiceMode && chatHistory.length > 0 && (
-            <div className="fixed bottom-20 right-6 w-80 max-h-[40vh] bg-surface/95 backdrop-blur-md border border-outline-variant rounded-2xl shadow-premium overflow-y-auto p-4 space-y-3 z-30">
-              <p className="text-[10px] font-black text-primary uppercase tracking-widest">Live Transcript</p>
-              {chatHistory.slice(-6).map((msg, idx) => (
-                <div key={idx} className={`flex flex-col ${msg.sender === 'candidate' ? 'items-end' : 'items-start'}`}>
-                  <span className="text-[9px] text-on-surface-variant uppercase font-black tracking-wider mb-0.5 px-1">
-                    {msg.sender === 'candidate' ? 'You' : 'AI'}
-                  </span>
-                  <div className={`p-2.5 rounded-xl text-[11px] leading-relaxed max-w-[90%] ${msg.sender === 'candidate'
-                    ? 'bg-primary text-on-primary rounded-tr-none'
-                    : msg.sender === 'acknowledgment'
-                      ? 'bg-secondary/10 text-secondary italic rounded-tl-none border border-secondary/20'
-                      : 'bg-surface-container text-on-surface rounded-tl-none border border-outline-variant'
-                  }`}>
-                    {msg.text}
-                  </div>
+            {/* RIGHT: Transcript Sidebar (only shown in voice mode and when feedback panel is not active) */}
+            {isVoiceMode && chatHistory.length > 0 && !showFeedbackPanel && (
+              <div className="w-80 border-l border-outline-variant bg-surface/30 backdrop-blur-md flex flex-col flex-shrink-0 transition-all duration-300">
+                <div className="p-4 border-b border-outline-variant flex items-center justify-between">
+                  <span className="text-xs font-black text-primary uppercase tracking-widest">Live Transcript</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 </div>
-              ))}
-              <div ref={chatEndRef} />
-            </div>
-          )}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {chatHistory.map((msg, idx) => (
+                    <div key={idx} className={`flex flex-col ${msg.sender === 'candidate' ? 'items-end' : 'items-start'}`}>
+                      <span className="text-[9px] text-on-surface-variant uppercase font-black tracking-wider mb-0.5 px-1">
+                        {msg.sender === 'candidate' ? 'You' : 'AI'}
+                      </span>
+                      <div className={`p-2.5 rounded-xl text-[11px] leading-relaxed max-w-[90%] ${msg.sender === 'candidate'
+                        ? 'bg-primary text-on-primary rounded-tr-none'
+                        : msg.sender === 'acknowledgment'
+                          ? 'bg-secondary/10 text-secondary italic rounded-tl-none border border-secondary/20'
+                          : 'bg-surface-container text-on-surface rounded-tl-none border border-outline-variant'
+                      }`}>
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={chatEndRef} />
+                </div>
+              </div>
+            )}
+          </div>
         </main>
       )}
 
