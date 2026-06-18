@@ -538,7 +538,7 @@ export const SessionPage: React.FC = () => {
       if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
       let interimTranscript = '';
       let finalTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      for (let i = 0; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
           finalTranscript += transcript;
@@ -547,7 +547,9 @@ export const SessionPage: React.FC = () => {
         }
       }
       const currentSessionText = finalTranscript + interimTranscript;
-      setResponseText(stableTextRef.current + (stableTextRef.current.trim() ? ' ' : '') + currentSessionText);
+      const newText = stableTextRef.current + (stableTextRef.current.trim() ? ' ' : '') + currentSessionText;
+      setResponseText(newText);
+      responseTextRef.current = newText;
     };
 
     rec.onerror = (event: any) => {
@@ -561,6 +563,7 @@ export const SessionPage: React.FC = () => {
       }
       // Auto-restart after a brief delay if we are still supposed to be listening
       if (isListeningRef.current) {
+        isListeningRef.current = false; // Reset so startListening doesn't return early
         setTimeout(startListening, 300);
       }
     };
@@ -570,6 +573,7 @@ export const SessionPage: React.FC = () => {
       stableTextRef.current = responseTextRef.current;
       // Auto-restart if we're still supposed to be listening
       if (isListeningRef.current) {
+        isListeningRef.current = false; // Reset so startListening doesn't return early
         setTimeout(startListening, 200);
       } else {
         setIsListening(false);
@@ -666,6 +670,9 @@ export const SessionPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const res = await api.startSession(role, interviewType, durationMins, selectedDomain, adaptiveMode);
+      setResponseText('');
+      responseTextRef.current = '';
+      stableTextRef.current = '';
       setSessionId(res.sessionId);
       setCurrentQuestion(res.firstQuestion);
       setTimerSeconds(durationMins * 60);
@@ -732,6 +739,8 @@ export const SessionPage: React.FC = () => {
     setCurrentQuestion(next);
     setNextQuestionRef(null);
     setResponseText('');
+    responseTextRef.current = '';
+    stableTextRef.current = '';
     setActiveScore(null);
     setShowFeedbackPanel(false);
     setQuestionNumber(prev => prev + 1);
@@ -1164,7 +1173,10 @@ export const SessionPage: React.FC = () => {
                   className="flex-grow min-h-[160px] p-5 rounded-2xl border-2 border-outline-variant focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-base leading-relaxed resize-none bg-surface/50 backdrop-blur-md text-on-surface"
                   placeholder={isVoiceMode ? 'Speak your answer — microphone is active...' : 'Type your response here...'}
                   value={responseText}
-                  onChange={e => setResponseText(e.target.value)}
+                  onChange={e => {
+                    setResponseText(e.target.value);
+                    responseTextRef.current = e.target.value;
+                  }}
                   disabled={isSubmitting || showFeedbackPanel}
                 />
 

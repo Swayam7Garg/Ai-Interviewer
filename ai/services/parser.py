@@ -64,9 +64,10 @@ def get_file_text(s3_key: str) -> str:
                 aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
                 region_name=os.environ.get("AWS_REGION", "us-east-1")
             )
-            # Download file locally to a temp path to extract text
-            temp_path = f"/tmp/{s3_key.replace('/', '_')}"
-            os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            tmp_dir = os.path.join(base_dir, "tmp")
+            os.makedirs(tmp_dir, exist_ok=True)
+            temp_path = os.path.join(tmp_dir, s3_key.replace('/', '_'))
             s3.download_file(bucket_name, s3_key, temp_path)
             
             if temp_path.lower().endswith(".pdf"):

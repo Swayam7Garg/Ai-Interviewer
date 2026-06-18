@@ -31,6 +31,11 @@ ai_service_url = os.environ.get("AI_SERVICE_URL", "http://localhost:8000")
 is_mock_s3 = os.environ.get("AWS_ACCESS_KEY_ID") == "mock" or not os.environ.get("AWS_ACCESS_KEY_ID")
 bucket_name = os.environ.get("S3_BUCKET_NAME", "techprep-ai-reports")
 
+# Create workspace-relative temp directory
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TMP_DIR = os.path.join(BASE_DIR, "tmp")
+os.makedirs(TMP_DIR, exist_ok=True)
+
 # Database setup
 engine = create_engine(db_url)
 
@@ -116,10 +121,7 @@ def generate_radar_chart(session_id: str, dimension_avgs: dict) -> str:
         
     plt.ylim(0, 100)
     plt.grid(color='#e5e7eb', linestyle='--')
-    
-    chart_path = f"/tmp/{session_id}_radar.png"
-    # Create temp directory if doesn't exist (useful in docker / temp)
-    os.makedirs("/tmp", exist_ok=True)
+    chart_path = os.path.join(TMP_DIR, f"{session_id}_radar.png")
     plt.savefig(chart_path, bbox_inches='tight', dpi=150)
     plt.close()
     return chart_path
@@ -144,8 +146,7 @@ def generate_bar_chart(session_id: str, questions: list) -> str:
     # Styling grids
     plt.grid(axis='y', linestyle=':', alpha=0.5)
     plt.gca().set_axisbelow(True)
-    
-    chart_path = f"/tmp/{session_id}_bar.png"
+    chart_path = os.path.join(TMP_DIR, f"{session_id}_bar.png")
     plt.savefig(chart_path, bbox_inches='tight', dpi=150)
     plt.close()
     return chart_path
@@ -489,7 +490,7 @@ def run_worker():
             bar_path = generate_bar_chart(session_id, session["questions"])
             
             # 4. Compile PDF Report
-            pdf_path = f"/tmp/{session_id}.pdf"
+            pdf_path = os.path.join(TMP_DIR, f"{session_id}.pdf")
             build_pdf(session, summary_data, radar_path, bar_path, pdf_path)
             
             # 5. Upload PDF to storage (Mock local or Real S3)
