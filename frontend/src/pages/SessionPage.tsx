@@ -90,6 +90,7 @@ export const SessionPage: React.FC = () => {
   const [currentAcknowledgment, setCurrentAcknowledgment] = useState<string>('');
   const [weakDomains, setWeakDomains] = useState<string[]>([]);
   const [isRegeneratingQuestion, setIsRegeneratingQuestion] = useState(false);
+  const [showQuestionPanel, setShowQuestionPanel] = useState(true);
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -1179,19 +1180,89 @@ export const SessionPage: React.FC = () => {
           {/* CENTER: Interview content */}
           <div className="flex-1 flex overflow-hidden">
 
+            {/* Question sidebar */}
+            <div className={`${showQuestionPanel ? 'w-96' : 'w-0'} transition-all duration-300 overflow-hidden flex-shrink-0 border-r border-outline-variant bg-surface/95 hidden lg:flex lg:flex-col`}>
+              <div className="p-5 border-b border-outline-variant flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black text-primary uppercase tracking-widest">Question Panel</p>
+                  <p className="text-xs text-on-surface-variant mt-1">Read the full prompt without scrolling</p>
+                </div>
+                <button
+                  onClick={() => setShowQuestionPanel(p => !p)}
+                  className="p-2 rounded-full border border-outline-variant bg-surface-container hover:bg-surface-container/70 transition-colors"
+                  title={showQuestionPanel ? 'Hide question panel' : 'Show question panel'}
+                >
+                  <span className="material-symbols-outlined text-sm">{showQuestionPanel ? 'chevron_left' : 'chevron_right'}</span>
+                </button>
+              </div>
+              {showQuestionPanel && (
+                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                  <div className="rounded-2xl border border-primary/10 bg-primary/5 p-4">
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {currentQuestion?.difficulty && (
+                        <span className={`inline-flex text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase ${
+                          currentQuestion.difficulty === 'easy'
+                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                            : currentQuestion.difficulty === 'hard'
+                              ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                              : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                        }`}>
+                          {currentQuestion.difficulty}
+                        </span>
+                      )}
+                      <span className="inline-flex text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-secondary-container text-on-secondary-container border-secondary/20 uppercase">
+                        {interviewType.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-wider mb-2">Current Question</p>
+                    <p className="text-sm leading-7 text-on-surface whitespace-pre-wrap break-words">
+                      {currentQuestion?.questionText || 'The question will appear here once the session starts.'}
+                    </p>
+                  </div>
+
+                  {currentAcknowledgment && (
+                    <div className="rounded-2xl border border-secondary/15 bg-secondary/5 p-4">
+                      <p className="text-[10px] font-black text-secondary uppercase tracking-wider mb-2">Brief Context</p>
+                      <p className="text-xs leading-relaxed text-on-surface-variant italic">{currentAcknowledgment}</p>
+                    </div>
+                  )}
+
+                  <div className="rounded-2xl border border-outline-variant bg-surface-container/40 p-4">
+                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-wider mb-2">Question Tips</p>
+                    <ul className="space-y-2 text-xs text-on-surface-variant leading-relaxed">
+                      <li>Answer in a structured flow, ideally STAR for behavioral prompts.</li>
+                      <li>Use the simplify action if the prompt feels too advanced.</li>
+                      <li>Keep this panel open while speaking so the full question stays visible.</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Main Q&A area */}
             <div className="flex-1 flex flex-col overflow-hidden p-6">
 
               {/* Question header */}
-              <div className="flex items-center gap-3 mb-4 flex-wrap">
-                <span className="bg-primary-fixed text-on-primary-fixed-variant px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider">{role}</span>
-                <span className="bg-secondary-container text-on-secondary-container px-4 py-1 rounded-full text-xs font-bold">Q{questionNumber}</span>
-                <span className="bg-surface-container text-on-surface-variant px-4 py-1 rounded-full text-xs font-medium capitalize">{interviewType.replace('_', ' ')}</span>
-                {weakDomains.length > 0 && (
-                  <span className="bg-error/10 text-error px-3 py-1 rounded-full text-[10px] font-bold border border-error/20">
-                    ⚠️ Weak: {weakDomains[weakDomains.length - 1]}
-                  </span>
-                )}
+              <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="bg-primary-fixed text-on-primary-fixed-variant px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider">{role}</span>
+                  <span className="bg-secondary-container text-on-secondary-container px-4 py-1 rounded-full text-xs font-bold">Q{questionNumber}</span>
+                  <span className="bg-surface-container text-on-surface-variant px-4 py-1 rounded-full text-xs font-medium capitalize">{interviewType.replace('_', ' ')}</span>
+                  {weakDomains.length > 0 && (
+                    <span className="bg-error/10 text-error px-3 py-1 rounded-full text-[10px] font-bold border border-error/20">
+                      ⚠️ Weak: {weakDomains[weakDomains.length - 1]}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowQuestionPanel(p => !p)}
+                  className="hidden lg:inline-flex items-center gap-2 px-3 py-2 rounded-full border border-outline-variant bg-surface-container text-xs font-bold text-on-surface-variant hover:bg-surface-container/70 transition-colors"
+                  title={showQuestionPanel ? 'Hide question panel' : 'Show question panel'}
+                >
+                  <span className="material-symbols-outlined text-sm">quiz</span>
+                  {showQuestionPanel ? 'Hide Question' : 'Show Question'}
+                </button>
               </div>
 
               {/* Domain coverage bar */}
@@ -1212,7 +1283,7 @@ export const SessionPage: React.FC = () => {
               </div>
 
               {/* Question Card */}
-              <div className="bg-surface rounded-2xl p-6 shadow-md border border-primary/10 relative overflow-hidden group mb-4">
+              <div className="bg-surface rounded-2xl p-6 shadow-md border border-primary/10 relative overflow-hidden group mb-4 lg:hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 group-hover:scale-110 duration-500 transition-transform" />
                 {currentAcknowledgment && (
                   <p className="text-sm text-secondary italic mb-3 leading-relaxed border-l-4 border-secondary/30 pl-3">{currentAcknowledgment}</p>
