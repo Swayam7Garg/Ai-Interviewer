@@ -203,6 +203,7 @@ def get_question_generation_prompt(
     selected_domain: str = None,
     adaptive_mode: bool = False,
     last_score: float = None,
+    force_difficulty: str = None,
 ) -> str:
     """
     HackerRank / Unstop style domain-cycling prompt.
@@ -258,9 +259,12 @@ def get_question_generation_prompt(
         next_domain_idx = total_answers % len(domains)
         next_domain = domains[next_domain_idx]
 
-    # Set per-domain difficulty — adaptive_mode overrides heuristic when last_score is provided
+    # Set per-domain difficulty — force_difficulty override takes first priority
     perf = domain_performance.get(next_domain_idx, [])
-    if adaptive_mode and last_score is not None:
+    if force_difficulty in ["easy", "medium", "hard"]:
+        adaptive_difficulty = force_difficulty
+        difficulty_rationale = f"Manual Override: requested {force_difficulty.upper()} difficulty."
+    elif adaptive_mode and last_score is not None:
         if last_score >= 80:
             adaptive_difficulty = "hard"
             difficulty_rationale = f"Adaptive Mode: candidate scored {last_score:.0f}/100 → escalate to hard."

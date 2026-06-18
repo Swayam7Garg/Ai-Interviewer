@@ -39,6 +39,7 @@ class GenerateQuestionRequest(BaseModel):
     selected_domain: Optional[str] = None
     adaptive_mode: Optional[bool] = False
     last_score: Optional[float] = None  # Last overall_score (0-100) for adaptive difficulty
+    force_difficulty: Optional[str] = None  # Force a specific difficulty level (easy, medium, hard)
 
 class GenerateQuestionResponse(BaseModel):
     brief_acknowledgment: str = ""  # AI interviewer's contextual reply to the candidate's last answer

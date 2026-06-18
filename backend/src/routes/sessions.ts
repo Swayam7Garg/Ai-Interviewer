@@ -759,6 +759,124 @@ startxref
     }
   });
 
+  // POST /:id/regenerate-question
+  fastify.post('/:id/regenerate-question', async (request, reply) => {
+    const { id: sessionId } = request.params as { id: string };
+    const { questionId, difficulty } = z.object({
+      questionId: z.string(),
+      difficulty: z.enum(['easy', 'medium', 'hard']),
+    }).parse(request.body);
+    const userId = (request.user as any).sub;
+
+    const sessionRes = await fastify.db.query(
+      'SELECT * FROM "Session" WHERE id = $1 AND "userId" = $2',
+      [sessionId, userId]
+    );
+
+    if (sessionRes.rowCount === 0) {
+      return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
+    }
+    const session = sessionRes.rows[0];
+
+    // Check if the question is indeed unanswered
+    const questionRes = await fastify.db.query(
+      'SELECT * FROM "Question" WHERE id = $1 AND "sessionId" = $2',
+      [questionId, sessionId]
+    );
+    if (questionRes.rowCount === 0) {
+      return reply.status(404).send({ error: 'Not Found', message: 'Question not found' });
+    }
+    const question = questionRes.rows[0];
+
+    const answerRes = await fastify.db.query(
+      'SELECT 1 FROM "Answer" WHERE "questionId" = $1',
+      [questionId]
+    );
+    if (answerRes.rowCount && answerRes.rowCount > 0) {
+      return reply.status(400).send({ error: 'Bad Request', message: 'Cannot regenerate a question that is already answered' });
+    }
+
+    // Call AI service to generate a new question for the same domain with forced difficulty
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+    let questionText = question.questionText;
+    let questionType = question.questionType;
+    let newDifficulty = difficulty;
+    let followUpHint = '';
+    let briefAcknowledgment = '';
+
+    // Fetch previous questions and chat history for context
+    const allQuestionsRes = await fastify.db.query(
+      'SELECT "questionText" FROM "Question" WHERE "sessionId" = $1 AND id != $2 ORDER BY "orderIndex" ASC',
+      [sessionId, questionId]
+    );
+    const previousQuestionsText = allQuestionsRes.rows.map((q: any) => q.questionText);
+
+    const historyRes = await fastify.db.query(
+      `SELECT q."questionText", a."answerText"
+       FROM "Question" q
+       JOIN "Answer" a ON q.id = a."questionId"
+       WHERE q."sessionId" = $1 AND q.id != $2
+       ORDER BY q."orderIndex" ASC`,
+      [sessionId, questionId]
+    );
+    const chatHistory = historyRes.rows.map((row: any) => ({
+      question: row.questionText,
+      answer: row.answerText || ''
+    }));
+
+    // Grab latest resume for context
+    const resumeRes = await fastify.db.query(
+      'SELECT "parsedJson" FROM "Resume" WHERE "userId" = $1 ORDER BY "uploadedAt" DESC LIMIT 1',
+      [userId]
+    );
+    const resumeSummary = resumeRes.rowCount ? JSON.stringify(resumeRes.rows[0].parsedJson) : null;
+
+    // User experience level
+    const userRes = await fastify.db.query('SELECT "experienceLevel" FROM "User" WHERE id = $1', [userId]);
+    const expLevel = userRes.rows[0]?.experienceLevel || 'junior';
+
+    try {
+      const response = await fetch(`${aiServiceUrl}/ai/generate-question`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({
+          role: session.role,
+          interview_type: session.interviewType,
+          experience_level: expLevel,
+          resume_summary: resumeSummary,
+          previous_questions: previousQuestionsText,
+          chat_history: chatHistory,
+          selected_domain: session.selectedDomain || null,
+          adaptive_mode: true,
+          force_difficulty: difficulty,
+        }),
+      });
+
+      if (response.ok) {
+        const qData: any = await response.json();
+        questionText = qData.question_text || questionText;
+        questionType = qData.question_type || questionType;
+        newDifficulty = qData.difficulty || newDifficulty;
+        followUpHint = qData.follow_up_hint || followUpHint;
+        briefAcknowledgment = qData.brief_acknowledgment || '';
+      }
+    } catch (err) {
+      fastify.log.error(err, 'Failed to regenerate question. Using fallback.');
+    }
+
+    // Update in DB
+    const updateQRes = await fastify.db.query(
+      'UPDATE "Question" SET "questionText" = $1, "questionType" = $2, difficulty = $3 WHERE id = $4 RETURNING *',
+      [questionText, questionType, newDifficulty, questionId]
+    );
+
+    return {
+      ...updateQRes.rows[0],
+      briefAcknowledgment,
+    };
+  });
+
   // GET /history
   fastify.get('/history', async (request, reply) => {
     const userId = (request.user as any).sub;

@@ -258,6 +258,13 @@ export const api = {
     });
   },
 
+  async regenerateQuestion(sessionId: string, questionId: string, difficulty: 'easy' | 'medium' | 'hard'): Promise<Question & { briefAcknowledgment?: string }> {
+    return await request<Question & { briefAcknowledgment?: string }>(`/sessions/${sessionId}/regenerate-question`, {
+      method: 'POST',
+      body: JSON.stringify({ questionId, difficulty }),
+    });
+  },
+
   async getSessionDetail(sessionId: string): Promise<SessionDetail> {
     return await request<SessionDetail>(`/sessions/${sessionId}`);
   },

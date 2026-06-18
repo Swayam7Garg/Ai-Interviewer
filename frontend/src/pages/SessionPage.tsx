@@ -89,6 +89,7 @@ export const SessionPage: React.FC = () => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [currentAcknowledgment, setCurrentAcknowledgment] = useState<string>('');
   const [weakDomains, setWeakDomains] = useState<string[]>([]);
+  const [isRegeneratingQuestion, setIsRegeneratingQuestion] = useState(false);
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -110,6 +111,14 @@ export const SessionPage: React.FC = () => {
   const isLookingAwayRef = useRef(false);
   const lookAwayStartTimeRef = useRef<number | null>(null);
   const hasIncrementedLookAwayRef = useRef(false);
+
+  const isNoFaceRef = useRef(false);
+  const noFaceStartTimeRef = useRef<number | null>(null);
+  const hasIncrementedNoFaceRef = useRef(false);
+
+  const isMultipleFacesRef = useRef(false);
+  const multipleFacesStartTimeRef = useRef<number | null>(null);
+  const hasIncrementedMultipleFacesRef = useRef(false);
 
   useEffect(() => {
     responseTextRef.current = responseText;
@@ -359,6 +368,33 @@ export const SessionPage: React.FC = () => {
             }
             return c + 1;
           });
+
+          // 5s sustained missing face -> violation
+          const now = Date.now();
+          if (!isNoFaceRef.current) {
+            isNoFaceRef.current = true;
+            noFaceStartTimeRef.current = now;
+            hasIncrementedNoFaceRef.current = false;
+          } else if (
+            !hasIncrementedNoFaceRef.current &&
+            noFaceStartTimeRef.current &&
+            now - noFaceStartTimeRef.current >= 5000
+          ) {
+            hasIncrementedNoFaceRef.current = true;
+            setViolationCount(c => {
+              const next = c + 1;
+              violationCountRef.current = next;
+              setProctoringLogs(prev => [...prev, { timestamp, event: 'Face missing for 5+ seconds' }]);
+              setProctoringWarnings(prev => [...prev, `[${timestamp}] Violation: Face missing for 5+ seconds.`]);
+              if (next >= maxViolationsRef.current) {
+                setTimeout(() => {
+                  alert(`🚫 Interview Terminated: ${maxViolationsRef.current} proctoring violations reached.`);
+                  handleForceEndSession();
+                }, 500);
+              }
+              return next;
+            });
+          }
         } else if (predictions.length > 1) {
           setFaceDetectionStatus('multiple_faces');
           setWarningCount(c => {
@@ -368,7 +404,43 @@ export const SessionPage: React.FC = () => {
             }
             return c + 1;
           });
+
+          // 3s sustained multiple faces -> violation
+          const now = Date.now();
+          if (!isMultipleFacesRef.current) {
+            isMultipleFacesRef.current = true;
+            multipleFacesStartTimeRef.current = now;
+            hasIncrementedMultipleFacesRef.current = false;
+          } else if (
+            !hasIncrementedMultipleFacesRef.current &&
+            multipleFacesStartTimeRef.current &&
+            now - multipleFacesStartTimeRef.current >= 3000
+          ) {
+            hasIncrementedMultipleFacesRef.current = true;
+            setViolationCount(c => {
+              const next = c + 1;
+              violationCountRef.current = next;
+              setProctoringLogs(prev => [...prev, { timestamp, event: 'Multiple faces detected for 3+ seconds' }]);
+              setProctoringWarnings(prev => [...prev, `[${timestamp}] Violation: Multiple faces detected for 3+ seconds.`]);
+              if (next >= maxViolationsRef.current) {
+                setTimeout(() => {
+                  alert(`🚫 Interview Terminated: ${maxViolationsRef.current} proctoring violations reached.`);
+                  handleForceEndSession();
+                }, 500);
+              }
+              return next;
+            });
+          }
         } else {
+          // Reset missing face and multiple face trackers
+          isNoFaceRef.current = false;
+          noFaceStartTimeRef.current = null;
+          hasIncrementedNoFaceRef.current = false;
+
+          isMultipleFacesRef.current = false;
+          multipleFacesStartTimeRef.current = null;
+          hasIncrementedMultipleFacesRef.current = false;
+
           const face = predictions[0];
           const [sx, sy] = face.topLeft;
           const [ex, ey] = face.bottomRight;
@@ -741,6 +813,46 @@ export const SessionPage: React.FC = () => {
     setAiState('idle');
   };
 
+  const handleLowerDifficulty = async () => {
+    if (!sessionId || !currentQuestion || isRegeneratingQuestion) return;
+    const currentDiff = currentQuestion.difficulty || 'medium';
+    if (currentDiff === 'easy') return;
+
+    const targetDiff = currentDiff === 'hard' ? 'medium' : 'easy';
+
+    setIsRegeneratingQuestion(true);
+    try {
+      const res = await api.regenerateQuestion(sessionId, currentQuestion.id, targetDiff);
+      
+      // Update active question in state
+      setCurrentQuestion(res);
+      currentQuestionRef.current = res;
+      
+      // Update chat history to replace the last question text with the new one
+      setChatHistory(prev => {
+        const next = [...prev];
+        // Find last 'ai' type message
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i].sender === 'ai') {
+            next[i].text = res.questionText;
+            break;
+          }
+        }
+        return next;
+      });
+
+      // If speech is active, speak the new question
+      if (isVoiceMode) {
+        speakResponse(res.questionText, res.briefAcknowledgment);
+      }
+    } catch (err) {
+      console.error('Failed to lower question difficulty:', err);
+      alert('Failed to simplify the question. Please try again.');
+    } finally {
+      setIsRegeneratingQuestion(false);
+    }
+  };
+
   const handleNextOrFinish = async () => {
     if (nextQuestionRef) {
       moveToNextQuestion(nextQuestionRef);
@@ -1105,17 +1217,29 @@ export const SessionPage: React.FC = () => {
                 {currentAcknowledgment && (
                   <p className="text-sm text-secondary italic mb-3 leading-relaxed border-l-4 border-secondary/30 pl-3">{currentAcknowledgment}</p>
                 )}
-                {currentQuestion?.difficulty && (
-                  <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full border mb-2 uppercase ${
-                    currentQuestion.difficulty === 'easy'
-                      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                      : currentQuestion.difficulty === 'hard'
-                        ? 'bg-red-500/10 text-red-500 border-red-500/20'
-                        : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                  }`}>
-                    {currentQuestion.difficulty}
-                  </span>
-                )}
+                <div className="flex items-center justify-between mb-2 z-10 relative">
+                  {currentQuestion?.difficulty && (
+                    <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase ${
+                      currentQuestion.difficulty === 'easy'
+                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                        : currentQuestion.difficulty === 'hard'
+                          ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                          : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                    }`}>
+                      {currentQuestion.difficulty}
+                    </span>
+                  )}
+                  {currentQuestion?.difficulty && currentQuestion.difficulty !== 'easy' && !showFeedbackPanel && (
+                    <button
+                      onClick={handleLowerDifficulty}
+                      disabled={isRegeneratingQuestion}
+                      className="text-[10px] font-bold text-primary hover:text-secondary flex items-center gap-1 bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full cursor-pointer hover:bg-primary/20 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-[10px] leading-none">trending_down</span>
+                      {isRegeneratingQuestion ? 'Simplifying...' : 'Simplify Question / Lower Level'}
+                    </button>
+                  )}
+                </div>
                 <h2 className="text-xl font-bold leading-tight text-on-surface relative z-10">
                   {currentQuestion?.questionText}
                 </h2>

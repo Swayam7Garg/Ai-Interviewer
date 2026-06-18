@@ -78,6 +78,7 @@ async def generate_question(request: GenerateQuestionRequest):
         selected_domain=request.selected_domain,
         adaptive_mode=request.adaptive_mode or False,
         last_score=request.last_score,
+        force_difficulty=request.force_difficulty,
     )
 
     try:
