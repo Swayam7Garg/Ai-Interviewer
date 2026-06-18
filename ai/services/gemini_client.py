@@ -10,8 +10,9 @@ logger = logging.getLogger(__name__)
 gemini_key = os.environ.get("GEMINI_API_KEY", "")
 groq_key = os.environ.get("GROQ_API_KEY", "")
 
-use_groq = False # Force Gemini since Groq key is not active/configured
-use_gemini = bool(gemini_key and gemini_key != "mock" and gemini_key != "mock-or-insert-key-here")
+# Prioritize Groq as the main API client if the key is provided, otherwise fall back to Gemini
+use_groq = bool(groq_key and groq_key != "mock" and groq_key != "mock-or-insert-key-here")
+use_gemini = bool(gemini_key and gemini_key != "mock" and gemini_key != "mock-or-insert-key-here") if not use_groq else False
 
 is_mock = not use_groq and not use_gemini
 
