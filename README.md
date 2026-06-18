@@ -1,5 +1,9 @@
 # TechPrep AI — The Ultimate AI Interview Practice Platform
 
+## Project Ownership
+This repository is maintained and documented by Swayam Garg.
+It is presented here as an independent project write-up and not as a contributor list for the original upstream repository.
+
 ## 1. Introduction and Background
 TechPrep AI is a full-stack, production-ready interview practice platform designed to help computer science students and software engineers prepare for technical and behavioral job interviews. With the rising competitiveness in the tech industry, candidates often lack realistic, highly-structured interview practice. Traditional mock interviews are difficult to schedule, and generic AI chatbots do not offer the rigorous, domain-specific deep dives required to ace top-tier technical interviews.
 
