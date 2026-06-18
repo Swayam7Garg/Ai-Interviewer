@@ -715,18 +715,6 @@ export const SessionPage: React.FC = () => {
       }
 
       setChatHistory(prev => [...prev, { sender: 'candidate', text, scores: res.scores }]);
-
-      if (isVoiceActiveRef.current) {
-        // Auto-progress in voice mode after 3s
-        setTimeout(() => {
-          if (res.nextQuestion) {
-            moveToNextQuestion(res.nextQuestion);
-          } else {
-            saveProctoringData(sessionId);
-            handleForceEndSession();
-          }
-        }, 3000);
-      }
     } catch (err) {
       console.error('Failed to submit answer', err);
       setAiState('listening');
