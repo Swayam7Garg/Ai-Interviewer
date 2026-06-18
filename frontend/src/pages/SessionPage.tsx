@@ -754,8 +754,9 @@ export const SessionPage: React.FC = () => {
         localStorage.setItem(`weak_domains_${sessionId}`, JSON.stringify({ role, domains: weakDomains }));
         await api.endSession(sessionId);
         navigate(`/summary?sessionId=${sessionId}`);
-      } catch {
-        navigate('/summary');
+      } catch (err) {
+        console.error('Failed to end session gracefully:', err);
+        navigate(`/summary?sessionId=${sessionId}`);
       } finally {
         setIsSubmitting(false);
       }
@@ -774,8 +775,9 @@ export const SessionPage: React.FC = () => {
         await api.endSession(sessionId);
       }
       navigate(`/summary${sessionId ? `?sessionId=${sessionId}` : ''}`);
-    } catch {
-      navigate('/summary');
+    } catch (err) {
+      console.error('Failed to force end session gracefully:', err);
+      navigate(`/summary${sessionId ? `?sessionId=${sessionId}` : ''}`);
     } finally {
       setIsSubmitting(false);
     }
