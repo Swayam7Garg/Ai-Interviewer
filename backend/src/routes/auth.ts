@@ -154,6 +154,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     return { success: true };
   });
 
+  /* Google and GitHub OAuth commented out temporarily
   // GET /oauth/google
   fastify.get('/oauth/google', async (request, reply) => {
     let baseUrl = process.env.API_URL || `${request.protocol}://${request.hostname}`;
@@ -279,4 +280,5 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     return reply.redirect(`${webUrl}/oauth-callback?token=${accessToken}`);
   });
+  */
 }

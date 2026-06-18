@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ParticleBackground } from '../components/ParticleBackground';
-import { api, API_BASE_URL } from '../utils/api';
+import { api } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
 
 export const LoginPage: React.FC = () => {
@@ -72,7 +72,7 @@ export const LoginPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Social Logins */}
+          {/* Social Logins commented out
           <div className="space-y-3 mb-8">
             <button 
               onClick={() => {
@@ -100,13 +100,13 @@ export const LoginPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Divider */}
           <div className="relative mb-8 flex items-center justify-center">
             <div className="border-t border-outline/30 w-full"></div>
             <span className="absolute bg-surface px-4 text-on-surface-variant font-bold text-xs">
               or
             </span>
           </div>
+          */}
 
           {/* Login Form */}
           <form className="space-y-6" onSubmit={handleSubmit}>

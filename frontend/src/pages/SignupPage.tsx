@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ParticleBackground } from '../components/ParticleBackground';
-import { api, API_BASE_URL } from '../utils/api';
+import { api } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
 
 export const SignupPage: React.FC = () => {
@@ -76,6 +76,7 @@ export const SignupPage: React.FC = () => {
             <p className="text-on-surface-variant font-medium text-sm">Join 50,000+ engineers prepping for their dream roles</p>
           </div>
 
+          {/* OAuth Buttons Commented Out
           <div className="grid grid-cols-2 gap-4 mb-8">
             <button 
               onClick={() => {
@@ -106,6 +107,7 @@ export const SignupPage: React.FC = () => {
             <span className="flex-shrink mx-4 text-xs text-on-surface-variant font-bold uppercase tracking-widest">or</span>
             <div className="flex-grow border-t border-outline/30"></div>
           </div>
+          */}
 
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div className="space-y-1">
