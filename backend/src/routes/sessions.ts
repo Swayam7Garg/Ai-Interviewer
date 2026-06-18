@@ -485,13 +485,24 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
       }
     }
 
-    // Trigger PDF report generation via Redis
+    // Trigger PDF report generation via HTTP call to FastAPI service (runs in BackgroundTasks)
     try {
-      const redisPayload = JSON.stringify({ session_id: sessionId, user_id: userId });
-      await fastify.redis.publish('pdf:generate', redisPayload);
-      fastify.log.info(`Published PDF trigger to channel 'pdf:generate' for session ${sessionId}`);
+      const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+      fetch(`${aiServiceUrl}/ai/generate-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, user_id: userId }),
+      }).then((res) => {
+        if (res.ok) {
+          fastify.log.info(`Successfully triggered HTTP PDF report generation for session ${sessionId}`);
+        } else {
+          fastify.log.error(`AI Service returned status ${res.status} when triggering PDF report`);
+        }
+      }).catch((err) => {
+        fastify.log.error(err, 'Failed to trigger PDF report generation via HTTP call to AI Service');
+      });
     } catch (err) {
-      fastify.log.error(err, 'Failed to trigger PDF report job via Redis pub/sub');
+      fastify.log.error(err, 'Error preparing HTTP call for PDF report generation');
     }
 
     // Generate a mock PDF if running in local/mock database mode
@@ -662,15 +673,24 @@ startxref
     const hasReport = Boolean(session.reportS3Key);
 
     if (!hasReport) {
-      // Self-healing: if the interview ended and the report is still not ready, re-trigger the publish
-      // in case the initial pub/sub message was lost due to network or connection drops.
+      // Self-healing: if the interview ended and the report is still not ready, re-trigger the generation
+      // in case the initial HTTP call failed or timed out.
       if (session.endedAt) {
         try {
-          const redisPayload = JSON.stringify({ session_id: sessionId, user_id: userId });
-          await fastify.redis.publish('pdf:generate', redisPayload);
-          fastify.log.info(`Re-published PDF trigger to channel 'pdf:generate' for session ${sessionId} (self-healing)`);
+          const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+          fetch(`${aiServiceUrl}/ai/generate-report`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, user_id: userId }),
+          }).then((res) => {
+            if (res.ok) {
+              fastify.log.info(`Successfully re-triggered HTTP PDF report generation for session ${sessionId} (self-healing)`);
+            }
+          }).catch((err) => {
+            fastify.log.error(err, 'Failed to re-trigger PDF report generation via HTTP call (self-healing)');
+          });
         } catch (err) {
-          fastify.log.error(err, 'Failed to re-trigger PDF report job via Redis pub/sub');
+          fastify.log.error(err, 'Error preparing HTTP call for PDF report generation (self-healing)');
         }
       }
       return { ready: false, message: 'PDF report is still being compiled. Check back in a few seconds.' };

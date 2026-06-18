@@ -285,3 +285,17 @@ Return ONLY valid JSON:
     except Exception as e:
         logger.error(f"Error generating report summary: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate report summary")
+
+
+from pydantic import BaseModel
+from fastapi import BackgroundTasks
+
+class GenerateReportEndpointRequest(BaseModel):
+    session_id: str
+    user_id: str
+
+@router.post("/generate-report")
+async def generate_report_endpoint(request: GenerateReportEndpointRequest, background_tasks: BackgroundTasks):
+    from workers.pdf_worker import generate_pdf_report
+    background_tasks.add_task(generate_pdf_report, request.session_id, request.user_id)
+    return {"status": "triggered", "message": "PDF report generation started in background."}

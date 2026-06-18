@@ -404,6 +404,127 @@ def build_pdf(session: dict, summary_data: dict, radar_path: str, bar_path: str,
     
     doc.build(story)
 
+def generate_pdf_report(session_id: str, user_id: str) -> bool:
+    """Generates PDF report and uploads to storage (S3 or local mock)."""
+    logger.info(f"Received PDF generation job for session {session_id}")
+    try:
+        # 1. Fetch Session Data
+        session = fetch_session_data(session_id)
+        if not session:
+            logger.error(f"Session {session_id} not found in DB")
+            return False
+            
+        # 2. Call FastAPI for report summary
+        questions_scores = []
+        for q in session["questions"]:
+            if q["answer"] and q["answer"]["score"]:
+                questions_scores.append({
+                    "question": q["questionText"],
+                    "score": q["answer"]["score"]["overallScore"]
+                })
+                
+        # Calculate dimension averages for the prompt
+        total_star = sum(q["answer"]["score"]["starScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
+        total_tech = sum(q["answer"]["score"]["techDepthScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
+        total_comm = sum(q["answer"]["score"]["commScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
+        total_rel = sum(q["answer"]["score"]["relevanceScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
+        total_conf = sum(q["answer"]["score"]["confidenceScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
+        total_conc = sum(q["answer"]["score"]["concisenessScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
+        score_count = sum(1 for q in session["questions"] if q["answer"] and q["answer"]["score"])
+        
+        dim_avgs = {
+            "star": total_star / score_count if score_count > 0 else 0,
+            "techDepth": total_tech / score_count if score_count > 0 else 0,
+            "comm": total_comm / score_count if score_count > 0 else 0,
+            "relevance": total_rel / score_count if score_count > 0 else 0,
+            "confidence": total_conf / score_count if score_count > 0 else 0,
+            "conciseness": total_conc / score_count if score_count > 0 else 0
+        }
+        
+        session_data = {
+            "role": session["role"],
+            "interview_type": session["interviewType"],
+            "overall_score": session["overallScore"],
+            "questions_and_scores": questions_scores,
+            "dimension_averages": dim_avgs
+        }
+        
+        summary_data = {
+            "executive_summary": "The candidate has demonstrated a solid grasp of technical concepts and structured behavioral communication. Action steps are recommended to optimize performance further.",
+            "action_plan": [
+                "Practice technical depth by discussing system components explicitly.",
+                "Strengthen STAR actions by taking first-person ownership.",
+                "Verify result metrics by adding percentages.",
+                "Pace communication by removing verbal crutches.",
+                "Optimize conciseness by keeping answers around 200 words."
+            ]
+        }
+        
+        try:
+            response = requests.post(
+                f"{ai_service_url}/ai/report-summary",
+                headers={"Content-Type": "application/json"},
+                json={"session_data": session_data},
+                timeout=15
+            )
+            if response.status_code == 200:
+                summary_data = response.json()
+        except Exception as e:
+            logger.error(f"Error fetching report summary from AI service: {e}. Using fallback summary.")
+
+        # 3. Generate Matplotlib Charts
+        radar_path = generate_radar_chart(session_id, dim_avgs)
+        bar_path = generate_bar_chart(session_id, session["questions"])
+        
+        # 4. Compile PDF Report
+        pdf_path = os.path.join(TMP_DIR, f"{session_id}.pdf")
+        build_pdf(session, summary_data, radar_path, bar_path, pdf_path)
+        
+        # 5. Upload PDF to storage (Mock local or Real S3)
+        s3_key = f"reports/{user_id}/{session_id}.pdf"
+        
+        if is_mock_s3:
+            # Save locally in the backend local_storage folder so GET /download-local can serve it!
+            api_storage_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backend", "local_storage")
+            os.makedirs(api_storage_dir, exist_ok=True)
+            dest_local_path = os.path.join(api_storage_dir, s3_key.replace("/", "_"))
+            
+            with open(pdf_path, "rb") as f_src:
+                with open(dest_local_path, "wb") as f_dest:
+                    f_dest.write(f_src.read())
+                    
+            logger.info(f"[Mock S3] Uploaded report locally to: {dest_local_path}")
+        else:
+            try:
+                s3 = boto3.client(
+                    "s3",
+                    aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+                    aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+                    region_name=os.environ.get("AWS_REGION", "us-east-1")
+                )
+                s3.upload_file(pdf_path, bucket_name, s3_key, ExtraArgs={'ContentType': 'application/pdf'})
+                logger.info(f"Successfully uploaded PDF report to S3 bucket {bucket_name} at key {s3_key}")
+            except Exception as s3_err:
+                logger.error(f"S3 Upload failed: {s3_err}")
+        
+        # 6. Update database session reportS3Key
+        with engine.connect() as conn:
+            conn.execute(
+                text('UPDATE "Session" SET "reportS3Key" = :key WHERE id = :sid'),
+                {"key": s3_key, "sid": session_id}
+            )
+            conn.commit()
+            logger.info(f"Successfully updated database session {session_id} with report key: {s3_key}")
+            
+        # Clean up temp files
+        for p in [radar_path, bar_path, pdf_path]:
+            if os.path.exists(p):
+                os.remove(p)
+        return True
+    except Exception as err:
+        logger.error(f"Error processing PDF generation: {err}")
+        return False
+
 def run_worker():
     """Listens on Redis channel and builds PDF report."""
     logger.info("PDF generation worker is running and subscribing to channel 'pdf:generate'...")
@@ -418,124 +539,9 @@ def run_worker():
             data = json.loads(message["data"].decode("utf-8"))
             session_id = data.get("session_id")
             user_id = data.get("user_id")
-            
-            logger.info(f"Received PDF generation job for session {session_id}")
-            
-            # 1. Fetch Session Data
-            session = fetch_session_data(session_id)
-            if not session:
-                logger.error(f"Session {session_id} not found in DB")
-                continue
-                
-            # 2. Call FastAPI for report summary
-            questions_scores = []
-            for q in session["questions"]:
-                if q["answer"] and q["answer"]["score"]:
-                    questions_scores.append({
-                        "question": q["questionText"],
-                        "score": q["answer"]["score"]["overallScore"]
-                    })
-                    
-            # Calculate dimension averages for the prompt
-            total_star = sum(q["answer"]["score"]["starScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
-            total_tech = sum(q["answer"]["score"]["techDepthScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
-            total_comm = sum(q["answer"]["score"]["commScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
-            total_rel = sum(q["answer"]["score"]["relevanceScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
-            total_conf = sum(q["answer"]["score"]["confidenceScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
-            total_conc = sum(q["answer"]["score"]["concisenessScore"] for q in session["questions"] if q["answer"] and q["answer"]["score"])
-            score_count = sum(1 for q in session["questions"] if q["answer"] and q["answer"]["score"])
-            
-            dim_avgs = {
-                "star": total_star / score_count if score_count > 0 else 0,
-                "techDepth": total_tech / score_count if score_count > 0 else 0,
-                "comm": total_comm / score_count if score_count > 0 else 0,
-                "relevance": total_rel / score_count if score_count > 0 else 0,
-                "confidence": total_conf / score_count if score_count > 0 else 0,
-                "conciseness": total_conc / score_count if score_count > 0 else 0
-            }
-            
-            session_data = {
-                "role": session["role"],
-                "interview_type": session["interviewType"],
-                "overall_score": session["overallScore"],
-                "questions_and_scores": questions_scores,
-                "dimension_averages": dim_avgs
-            }
-            
-            summary_data = {
-                "executive_summary": "The candidate has demonstrated a solid grasp of technical concepts and structured behavioral communication. Action steps are recommended to optimize performance further.",
-                "action_plan": [
-                    "Practice technical depth by discussing system components explicitly.",
-                    "Strengthen STAR actions by taking first-person ownership.",
-                    "Verify result metrics by adding percentages.",
-                    "Pace communication by removing verbal crutches.",
-                    "Optimize conciseness by keeping answers around 200 words."
-                ]
-            }
-            
-            try:
-                response = requests.post(
-                    f"{ai_service_url}/ai/report-summary",
-                    headers={"Content-Type": "application/json"},
-                    json={"session_data": session_data},
-                    timeout=15
-                )
-                if response.status_code == 200:
-                    summary_data = response.json()
-            except Exception as e:
-                logger.error(f"Error fetching report summary from AI service: {e}. Using fallback summary.")
-
-            # 3. Generate Matplotlib Charts
-            radar_path = generate_radar_chart(session_id, dim_avgs)
-            bar_path = generate_bar_chart(session_id, session["questions"])
-            
-            # 4. Compile PDF Report
-            pdf_path = os.path.join(TMP_DIR, f"{session_id}.pdf")
-            build_pdf(session, summary_data, radar_path, bar_path, pdf_path)
-            
-            # 5. Upload PDF to storage (Mock local or Real S3)
-            s3_key = f"reports/{user_id}/{session_id}.pdf"
-            
-            if is_mock_s3:
-                # Save locally in the backend local_storage folder so GET /download-local can serve it!
-                api_storage_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backend", "local_storage")
-                os.makedirs(api_storage_dir, exist_ok=True)
-                dest_local_path = os.path.join(api_storage_dir, s3_key.replace("/", "_"))
-                
-                with open(pdf_path, "rb") as f_src:
-                    with open(dest_local_path, "wb") as f_dest:
-                        f_dest.write(f_src.read())
-                        
-                logger.info(f"[Mock S3] Uploaded report locally to: {dest_local_path}")
-            else:
-                try:
-                    s3 = boto3.client(
-                        "s3",
-                        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-                        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-                        region_name=os.environ.get("AWS_REGION", "us-east-1")
-                    )
-                    s3.upload_file(pdf_path, bucket_name, s3_key, ExtraArgs={'ContentType': 'application/pdf'})
-                    logger.info(f"Successfully uploaded PDF report to S3 bucket {bucket_name} at key {s3_key}")
-                except Exception as s3_err:
-                    logger.error(f"S3 Upload failed: {s3_err}")
-            
-            # 6. Update database session reportS3Key
-            with engine.connect() as conn:
-                conn.execute(
-                    text('UPDATE "Session" SET "reportS3Key" = :key WHERE id = :sid'),
-                    {"key": s3_key, "sid": session_id}
-                )
-                conn.commit()
-                logger.info(f"Successfully updated database session {session_id} with report key: {s3_key}")
-                
-            # Clean up temp files
-            for p in [radar_path, bar_path, pdf_path]:
-                if os.path.exists(p):
-                    os.remove(p)
-                    
+            generate_pdf_report(session_id, user_id)
         except Exception as err:
-            logger.error(f"Error processing PDF generation: {err}")
+            logger.error(f"Error reading Redis message: {err}")
 
 if __name__ == "__main__":
     while True:
