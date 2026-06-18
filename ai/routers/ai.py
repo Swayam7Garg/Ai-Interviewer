@@ -174,7 +174,7 @@ async def score_answer(request: ScoreAnswerRequest):
         score_data = run_gemini_json(
             prompt,
             generation_config={"temperature": 0.0, "response_mime_type": "application/json"},
-            use_fast=False  # Quality model for accurate scoring
+            use_fast=True  # Fast model to avoid 70B rate limits and timeouts
         )
         
         # Handle rate limits or other API errors returned by run_gemini_json
@@ -410,7 +410,7 @@ Return ONLY valid JSON:
         report_data = run_gemini_json(
             prompt,
             generation_config={"temperature": 0.3, "response_mime_type": "application/json"},
-            use_fast=False  # Quality model for comprehensive report
+            use_fast=True  # Fast model to avoid 70B rate limits and timeouts
         )
         if not report_data or "executive_summary" not in report_data or "action_plan" not in report_data or "error" in report_data:
             raise ValueError("Invalid report summary format or LLM client error")
