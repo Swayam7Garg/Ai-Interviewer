@@ -112,10 +112,10 @@ export const HistoryPage: React.FC = () => {
               value={selectedRole}
               onChange={(e) => setSelectedRole(e.target.value)}
             >
-              <option>All Roles</option>
-              <option>Senior Frontend Engineer</option>
-              <option>Product Manager</option>
-              <option>SDE II</option>
+              <option className="bg-surface text-on-surface">All Roles</option>
+              <option className="bg-surface text-on-surface">Senior Frontend Engineer</option>
+              <option className="bg-surface text-on-surface">Product Manager</option>
+              <option className="bg-surface text-on-surface">SDE II</option>
             </select>
           </div>
 
@@ -126,9 +126,9 @@ export const HistoryPage: React.FC = () => {
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
             >
-              <option>All Types</option>
-              <option value="technical">Technical</option>
-              <option value="behavioural">Behavioral</option>
+              <option className="bg-surface text-on-surface">All Types</option>
+              <option className="bg-surface text-on-surface" value="technical">Technical</option>
+              <option className="bg-surface text-on-surface" value="behavioural">Behavioral</option>
             </select>
           </div>
 

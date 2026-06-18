@@ -91,6 +91,7 @@ export const SessionPage: React.FC = () => {
   const [weakDomains, setWeakDomains] = useState<string[]>([]);
   const [isRegeneratingQuestion, setIsRegeneratingQuestion] = useState(false);
   const [showQuestionPanel, setShowQuestionPanel] = useState(true);
+  const isEndingSessionRef = useRef(false);
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -131,6 +132,15 @@ export const SessionPage: React.FC = () => {
   useEffect(() => { aiStateRef.current = aiState; }, [aiState]);
   useEffect(() => { violationCountRef.current = violationCount; }, [violationCount]);
   useEffect(() => { maxViolationsRef.current = maxViolations; }, [maxViolations]);
+
+  const cancelVoicePlayback = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+    stopListening();
+    setAiState('idle');
+  };
 
   // ── Save Proctoring Data ───────────────────────────────────────────────────
   const saveProctoringData = (sid: string) => {
@@ -571,6 +581,7 @@ export const SessionPage: React.FC = () => {
   };
 
   const speakResponse = (questionText: string, acknowledgment?: string) => {
+    if (isEndingSessionRef.current) return;
     if (!('speechSynthesis' in window)) { startListeningAfterSpeech(); return; }
     window.speechSynthesis.cancel();
     setAiState('speaking');
@@ -711,9 +722,7 @@ export const SessionPage: React.FC = () => {
     if (sessionStarted && currentQuestion && isVoiceMode) {
       speakResponse(currentQuestion.questionText, (currentQuestion as any).briefAcknowledgment);
     } else if (!isVoiceMode) {
-      stopListening();
-      window.speechSynthesis.cancel();
-      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      cancelVoicePlayback();
     }
   }, [isVoiceMode]);
 
@@ -859,12 +868,13 @@ export const SessionPage: React.FC = () => {
       moveToNextQuestion(nextQuestionRef);
     } else {
       setIsSubmitting(true);
+      isEndingSessionRef.current = true;
       try {
-        stopListening();
-        window.speechSynthesis.cancel();
+        cancelVoicePlayback();
         saveProctoringData(sessionId);
         // Save weak domains to localStorage for SummaryPage
         localStorage.setItem(`weak_domains_${sessionId}`, JSON.stringify({ role, domains: weakDomains }));
+        localStorage.setItem('last_completed_session_id', sessionId);
         await api.endSession(sessionId);
         navigate(`/summary?sessionId=${sessionId}`);
       } catch (err) {
@@ -877,14 +887,14 @@ export const SessionPage: React.FC = () => {
   };
 
   const handleForceEndSession = async () => {
-    stopListening();
-    window.speechSynthesis.cancel();
-    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     setIsSubmitting(true);
+    isEndingSessionRef.current = true;
     try {
+      cancelVoicePlayback();
       if (sessionId) {
         saveProctoringData(sessionId);
         localStorage.setItem(`weak_domains_${sessionId}`, JSON.stringify({ role, domains: weakDomains }));
+        localStorage.setItem('last_completed_session_id', sessionId);
         await api.endSession(sessionId);
       }
       navigate(`/summary${sessionId ? `?sessionId=${sessionId}` : ''}`);

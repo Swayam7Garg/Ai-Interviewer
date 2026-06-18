@@ -444,6 +444,8 @@ export const SummaryPage: React.FC = () => {
           const stats = await api.getDashboardStats();
           if (stats.recentSessions && stats.recentSessions.length > 0) {
             targetId = stats.recentSessions[0].id;
+          } else {
+            targetId = localStorage.getItem('last_completed_session_id') || '';
           }
         }
 
