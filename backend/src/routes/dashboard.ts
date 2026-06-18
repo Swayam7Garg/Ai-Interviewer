@@ -124,7 +124,7 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       }
     }
 
-    if (weakAreas.length === 0) {
+    if (weakAreas.length === 0 && scoreCount > 0) {
       weakAreas.push({
         dimension: 'STAR Structure',
         avgPercentage: 0,

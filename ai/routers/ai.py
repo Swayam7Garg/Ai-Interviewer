@@ -10,7 +10,7 @@ from models.schemas import (
 )
 from services.gemini_client import run_gemini_json, get_model, is_mock, run_llm_stream
 from services.parser import get_file_text
-from services.role_prompts import get_role_config, get_question_generation_prompt, get_scoring_prompt
+from services.role_prompts import get_role_config, get_question_generation_prompt, get_scoring_prompt, get_local_fallback_question, get_local_fallback_score
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai")
@@ -90,14 +90,30 @@ async def generate_question(request: GenerateQuestionRequest):
             use_fast=True  # gemini-2.0-flash for real-time low latency
         )
 
+        # Handle rate limits or other API errors returned by run_gemini_json
+        if not question_data or "error" in question_data:
+            err_msg = question_data.get("error", "Unknown LLM error") if question_data else "Empty response"
+            logger.warning(f"Question generation LLM call failed: {err_msg}. Falling back to local domain-specific question generator.")
+            return get_local_fallback_question(
+                role=request.role,
+                chat_history=request.chat_history or [],
+                previous_questions=request.previous_questions,
+                selected_domain=request.selected_domain
+            )
+
         # Ensure brief_acknowledgment always exists
         if "brief_acknowledgment" not in question_data:
             question_data["brief_acknowledgment"] = ""
 
         return question_data
     except Exception as e:
-        logger.error(f"Error generating question: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate question")
+        logger.error(f"Error generating question: {e}. Falling back to local domain-specific question generator.")
+        return get_local_fallback_question(
+            role=request.role,
+            chat_history=request.chat_history or [],
+            previous_questions=request.previous_questions,
+            selected_domain=request.selected_domain
+        )
 
 
 @router.post("/score-answer", response_model=ScoreAnswerResponse)
@@ -159,10 +175,27 @@ async def score_answer(request: ScoreAnswerRequest):
             generation_config={"temperature": 0.0, "response_mime_type": "application/json"},
             use_fast=False  # Quality model for accurate scoring
         )
+        
+        # Handle rate limits or other API errors returned by run_gemini_json
+        if not score_data or "error" in score_data:
+            err_msg = score_data.get("error", "Unknown LLM error") if score_data else "Empty response"
+            logger.warning(f"Scoring LLM call failed: {err_msg}. Falling back to local heuristic scoring.")
+            return get_local_fallback_score(
+                role=request.role,
+                question=request.question,
+                answer=request.answer,
+                interview_type=request.interview_type
+            )
+            
         return score_data
     except Exception as e:
-        logger.error(f"Error scoring answer: {e}")
-        raise HTTPException(status_code=500, detail="Failed to score answer")
+        logger.error(f"Error scoring answer: {e}. Falling back to local heuristic scoring.")
+        return get_local_fallback_score(
+            role=request.role,
+            question=request.question,
+            answer=request.answer,
+            interview_type=request.interview_type
+        )
 
 
 @router.post("/generate-feedback")

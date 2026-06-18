@@ -430,3 +430,139 @@ Return ONLY valid JSON (no markdown, no commentary):
 }}
 """
 
+
+def get_local_fallback_question(role: str, chat_history: list, previous_questions: list, selected_domain: str = None) -> dict:
+    """Generates highly targeted, domain-specific fallback questions matching the user's role curriculum when API fails."""
+    cfg = get_role_config(role)
+    domains = cfg["domains"]
+    
+    # Identify next domain index based on chat history length
+    total_answers = len(chat_history) if chat_history else 0
+    if selected_domain and selected_domain.strip() and selected_domain.lower() != "all domains":
+        next_domain_idx = 0
+        for idx, d in enumerate(domains):
+            if d.lower() == selected_domain.lower():
+                next_domain_idx = idx
+                break
+    else:
+        next_domain_idx = total_answers % len(domains)
+    
+    next_domain = domains[next_domain_idx]
+    domain_lower = next_domain.lower()
+    
+    question_text = f"[{next_domain}] Can you explain your experience and key considerations when working with {next_domain} in a production environment?"
+    follow_up = "Ask for specific architectural trade-offs, common bottlenecks, and how they would monitor this in production."
+    
+    # Predefined high-quality questions mapped to domain topics
+    if "system design" in domain_lower or "scalability" in domain_lower:
+        question_text = f"[{next_domain}] Design a rate limiter for a public API gateway. How do you handle distributed state across multiple server nodes?"
+        follow_up = "Ask about token bucket vs leaky bucket, Redis integration, and handling race conditions under high concurrent load."
+    elif "database" in domain_lower:
+        question_text = f"[{next_domain}] You are experiencing slow database queries on a heavily read table. How do you diagnose the issue and design indexes to optimize it?"
+        follow_up = "Ask about EXPLAIN plans, B-Tree indexes, query execution steps, and write performance trade-offs."
+    elif "api design" in domain_lower:
+        question_text = f"[{next_domain}] You need to design an API for a real-time collaborative document editor. Would you use REST, GraphQL, WebSockets, or gRPC? Why?"
+        follow_up = "Ask about data transport formats, connection overhead, push vs pull trade-offs, and state synchronization."
+    elif "caching" in domain_lower:
+        question_text = f"[{next_domain}] Your application is experiencing cache stampede (thundering herd) and cache eviction under peak load. How do you configure and design your caching layer to mitigate this?"
+        follow_up = "Ask about Cache-Aside vs Write-Through, locking keys, TTL jitter, and Redis eviction policies like LFU vs LRU."
+    elif "concurrency" in domain_lower:
+        question_text = f"[{next_domain}] Explain how you would safely share and synchronize state between multiple threads in Java/Node.js. How do you prevent deadlocks?"
+        follow_up = "Ask about thread-safe collections, mutexes/semaphores, atomic operations, and how to thread profile a blocked application."
+    elif "java core" in domain_lower or "jvm" in domain_lower:
+        question_text = f"[{next_domain}] Explain JVM memory architecture (heap vs stack, metaspace). How does Garbage Collection work, and how would you tune G1GC for low-latency?"
+        follow_up = "Ask about generation sizes, GC pause time goals, memory leaks in Java (e.g. static maps), and profiling tools."
+    elif "spring" in domain_lower:
+        question_text = f"[{next_domain}] Walk me through the bean creation lifecycle in Spring. How does Spring handle @Transactional under the hood, and what are common pitfalls of self-invocation?"
+        follow_up = "Ask about proxy-based AOP, transaction propagation levels, bean post processors, and circular dependencies."
+    elif "design patterns" in domain_lower:
+        question_text = f"[{next_domain}] Describe a scenario where you implemented the Strategy pattern or Observer pattern. What are the pros and cons of using a Singleton pattern in a multithreaded application?"
+        follow_up = "Ask about class coupling, unit testability of Singletons, and thread-safe double-checked locking initialization."
+    elif "jpa" in domain_lower or "hibernate" in domain_lower:
+        question_text = f"[{next_domain}] Explain the N+1 select query problem in Hibernate. How do you detect and solve it using fetch joins or entity graphs?"
+        follow_up = "Ask about lazy loading, first vs second level cache, dynamic fetching, and database query count verification."
+    elif "microservices" in domain_lower:
+        question_text = f"[{next_domain}] How do you handle distributed transactions and maintain consistency across multiple microservices? Compare the Saga pattern vs two-phase commit."
+        follow_up = "Ask about eventual consistency, event sourcing, message brokers, and fallback retry mechanisms."
+    elif "mlops" in domain_lower or "serving" in domain_lower:
+        question_text = f"[{next_domain}] How do you handle model drift and perform shadow deployments or canary releases for a model serving latency bottleneck?"
+        follow_up = "Ask about metrics logging, dynamic routing, A/B testing framework, and scaling serving instances."
+    elif "deep learning" in domain_lower or "transformer" in domain_lower:
+        question_text = f"[{next_domain}] Explain the self-attention mechanism in Transformers. How does it scale with sequence length, and how do you optimize it for inference?"
+        follow_up = "Ask about query/key/value projections, FlashAttention, KV caching, and quantization."
+    elif "react" in domain_lower or "rendering" in domain_lower:
+        question_text = f"[{next_domain}] How does React's virtual DOM reconciliation work? Explain browser rendering layout/paint pipelines and how to minimize layout thrashing."
+        follow_up = "Ask about key prop, useMemo/useCallback, passive event listeners, and CSS containment."
+    elif "state management" in domain_lower:
+        question_text = f"[{next_domain}] Compare unidirectional state flow (Redux/Zustand) with context/reactive state. How do you prevent unnecessary re-renders in a large component tree?"
+        follow_up = "Ask about selectors, state normalization, atomic state libraries, and memoization."
+    elif "accessibility" in domain_lower or "wcag" in domain_lower:
+        question_text = f"[{next_domain}] You are building a complex custom dropdown component. How do you implement keyboard navigation and screen-reader ARIA attributes to meet WCAG standards?"
+        follow_up = "Ask about role description, focus management, aria-expanded/aria-activedescendant, and voiceover testing."
+    elif "product strategy" in domain_lower or "prioritization" in domain_lower:
+        question_text = f"[{next_domain}] You have limited engineering resources and multiple stakeholders demanding high-priority features. How do you prioritize your roadmap?"
+        follow_up = "Ask about RICE framework, MoSCoW, user research alignment, and negotiating trade-offs."
+        
+    return {
+        "brief_acknowledgment": "Good answer! Let's examine the next critical area of your domain.",
+        "question_text": question_text,
+        "question_type": "technical",
+        "difficulty": "medium",
+        "follow_up_hint": follow_up
+    }
+
+
+def get_local_fallback_score(role: str, question: str, answer: str, interview_type: str) -> dict:
+    """Generates a realistic, dynamic score and feedback locally based on response length and keyword matching when LLM fails."""
+    clean_ans = answer.strip().lower()
+    words = clean_ans.split()
+    word_count = len(words)
+    
+    # Heuristic scoring
+    star_score = min(25.0, 5.0 + (word_count / 15))
+    tech_depth_score = min(25.0, 5.0 + (word_count / 20))
+    
+    # Add points if they use technical keywords
+    tech_keywords = ["implementation", "design", "architecture", "database", "cache", "service", 
+                     "performance", "latency", "scale", "optimize", "query", "index", "concurrency",
+                     "spring", "java", "thread", "api", "rest", "git", "docker", "scalability", "load"]
+    matched_keywords = [kw for kw in tech_keywords if kw in clean_ans]
+    tech_depth_score = min(25.0, tech_depth_score + len(matched_keywords) * 1.5)
+    
+    comm_score = min(20.0, 10.0 + (word_count / 30))
+    relevance_score = min(15.0, 5.0 + (word_count / 40))
+    confidence_score = min(10.0, 6.0 + (1.0 if "i think" not in clean_ans else -1.0))
+    conciseness_score = min(5.0, 5.0 if 100 <= word_count <= 400 else (3.0 if word_count < 100 else 2.0))
+    
+    overall_score = star_score + tech_depth_score + comm_score + relevance_score + confidence_score + conciseness_score
+    overall_score = min(100.0, max(5.0, overall_score))
+    
+    top_strength = "Clear communication and structured explanation." if word_count > 50 else "Direct response style."
+    top_weakness = "Could expand on concrete technical details and system metrics." if len(matched_keywords) < 3 else "Refine architectural trade-offs."
+    
+    return {
+        "star_score": round(star_score, 1),
+        "tech_depth_score": round(tech_depth_score, 1),
+        "comm_score": round(comm_score, 1),
+        "relevance_score": round(relevance_score, 1),
+        "confidence_score": round(confidence_score, 1),
+        "conciseness_score": round(conciseness_score, 1),
+        "overall_score": round(overall_score, 1),
+        "star_feedback": {
+            "situation": "Stated context of the problem clearly.",
+            "task": "Identified the core engineering requirement.",
+            "action": "Outlined general steps taken, but could detail personal technical actions more.",
+            "result": "Mentioned the goal, but lacked quantified results or metrics."
+        },
+        "top_strength": top_strength,
+        "top_weakness": top_weakness,
+        "filler_words": [w for w in ["like", "basically", "actually"] if w in clean_ans],
+        "ideal_answer_skeleton": "Explain scenario -> define metrics -> detail architecture -> summarize outcome.",
+        "ideal_answer_outline": "Explain the architecture, list specific protocols, and quantify the results.",
+        "what_was_correct": ["Stated the general approach correctly."],
+        "technical_errors": [],
+        "key_concepts_missed": ["Quantified performance metrics", "Specific configuration trade-offs"],
+        "interviewer_correction": "Your general approach is correct. In a real interview, make sure to detail specific architectural choices, API design patterns, and name-drop tools/frameworks you used."
+    }
+
+

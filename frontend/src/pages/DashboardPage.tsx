@@ -14,12 +14,12 @@ export const DashboardPage: React.FC = () => {
   const [scoreTrend, setScoreTrend] = useState<ScoreTrendItem[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   // Streak state that can be incremented locally too
-  const [streak, setStreak] = useState(15);
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     const user = api.getCurrentUser();
     setCurrentUser(user);
-    if (user?.streak) {
+    if (user?.streak !== undefined && user?.streak !== null) {
       setStreak(user.streak);
     }
 
@@ -31,7 +31,7 @@ export const DashboardPage: React.FC = () => {
         ]);
         setStats(statsData);
         setScoreTrend(trendData);
-        if (statsData.streak) {
+        if (statsData.streak !== undefined && statsData.streak !== null) {
           setStreak(statsData.streak);
         }
       } catch (err) {

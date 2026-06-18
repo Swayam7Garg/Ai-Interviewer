@@ -662,7 +662,17 @@ startxref
     const hasReport = Boolean(session.reportS3Key);
 
     if (!hasReport) {
-      // Report still being compiled by the PDF worker
+      // Self-healing: if the interview ended and the report is still not ready, re-trigger the publish
+      // in case the initial pub/sub message was lost due to network or connection drops.
+      if (session.endedAt) {
+        try {
+          const redisPayload = JSON.stringify({ session_id: sessionId, user_id: userId });
+          await fastify.redis.publish('pdf:generate', redisPayload);
+          fastify.log.info(`Re-published PDF trigger to channel 'pdf:generate' for session ${sessionId} (self-healing)`);
+        } catch (err) {
+          fastify.log.error(err, 'Failed to re-trigger PDF report job via Redis pub/sub');
+        }
+      }
       return { ready: false, message: 'PDF report is still being compiled. Check back in a few seconds.' };
     }
 
