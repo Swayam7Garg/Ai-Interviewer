@@ -105,7 +105,48 @@ async def score_answer(request: ScoreAnswerRequest):
     """
     Score a candidate's answer using role-specific evaluation criteria.
     Uses quality model (1.5-flash) since slight latency is acceptable for scoring.
+    Includes a fast-fail check for empty or placeholder/short answers.
     """
+    # Normalize answer for quick validation
+    clean_ans = request.answer.strip().lower().replace(".", "").replace(",", "").replace("!", "").replace("?", "")
+    words = clean_ans.split()
+    
+    placeholders = {
+        "hi", "hello", "hey", "yes", "no", "ok", "okay", "nothing", "skip", 
+        "i don't know", "i dont know", "dont know", "don't know", "i donnt know",
+        "hello how are you", "hi how are you"
+    }
+    
+    is_placeholder = clean_ans in placeholders
+    is_short = len(words) < 3
+    
+    if is_short or is_placeholder:
+        logger.info(f"Fast-failing scoring for short/placeholder answer: '{request.answer}'")
+        return {
+            "star_score": 0.0,
+            "tech_depth_score": 0.0,
+            "comm_score": 0.0,
+            "relevance_score": 0.0,
+            "confidence_score": 0.0,
+            "conciseness_score": 0.0,
+            "overall_score": 0.0,
+            "star_feedback": {
+                "situation": "No context or situation was provided.",
+                "task": "No task or responsibility was described.",
+                "action": "No action was taken.",
+                "result": "No outcome or results were shared."
+            },
+            "top_strength": "None",
+            "top_weakness": "The response was too short or did not address the question.",
+            "filler_words": [],
+            "ideal_answer_skeleton": "Provide a structured answer following the STAR methodology.",
+            "ideal_answer_outline": "Please provide a complete answer with technical depth and clear structure.",
+            "what_was_correct": [],
+            "technical_errors": ["The answer was empty or too short to contain technical content."],
+            "key_concepts_missed": ["All relevant concepts for this question were missed."],
+            "interviewer_correction": "Please try to elaborate on your answer. Even if you're not fully sure, describe your initial thoughts, relevant technologies, or how you would approach solving the problem."
+        }
+
     prompt = get_scoring_prompt(
         role=request.role,
         question=request.question,

@@ -70,7 +70,7 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
       const response = await fetch(`${aiServiceUrl}/ai/generate-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(8000), // 8s timeout — fail fast to fallback
+        signal: AbortSignal.timeout(15000), // 15s timeout — fail fast to fallback
         body: JSON.stringify({
           role: data.role,
           interview_type: data.interviewType,
@@ -154,7 +154,7 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
       const response = await fetch(`${aiServiceUrl}/ai/score-answer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(10000), // 10s timeout for scoring
+        signal: AbortSignal.timeout(30000), // 30s timeout for scoring
         body: JSON.stringify({
           question: question.questionText,
           answer: answerText,
@@ -273,7 +273,7 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
           const response = await fetch(`${aiServiceUrl}/ai/generate-question`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(8000), // 8s timeout — fail fast to fallback
+            signal: AbortSignal.timeout(15000), // 15s timeout — fail fast to fallback
             body: JSON.stringify({
               role: session.role,
               interview_type: session.interviewType,
@@ -706,7 +706,7 @@ startxref
       const response = await fetch(`${aiServiceUrl}/ai/report-summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(20000), // longer timeout for quality model
+        signal: AbortSignal.timeout(30000), // longer timeout for quality model
         body: JSON.stringify({
           session_data: {
             role: session.role,
