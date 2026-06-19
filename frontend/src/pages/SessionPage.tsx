@@ -1623,7 +1623,7 @@ export const SessionPage: React.FC = () => {
 
       {/* Movement auto-fail warning near limit */}
       {sessionStarted && isProctoringEnabled && violationCount >= maxViolations - 1 && violationCount < maxViolations && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-amber-500/95 text-white font-bold px-8 py-4 rounded-2xl shadow-xl flex items-center gap-3 animate-pulse">
+        <div className="fixed top-36 left-1/2 -translate-x-1/2 z-50 bg-amber-500/95 text-white font-bold px-8 py-4 rounded-2xl shadow-xl flex items-center gap-3 animate-pulse border border-amber-600/40">
           <span className="material-symbols-outlined">crisis_alert</span>
           <span>⚠️ FINAL WARNING: One more violation = Interview Auto-Terminated!</span>
         </div>
