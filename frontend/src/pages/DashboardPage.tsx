@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ParticleBackground } from '../components/ParticleBackground';
 import { api } from '../utils/api';
-import type { SessionStats, ScoreTrendItem } from '../utils/api';
+import type { SessionStats, ScoreTrendItem, RadarItem } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
 
 export const DashboardPage: React.FC = () => {
@@ -12,6 +12,7 @@ export const DashboardPage: React.FC = () => {
   const [timeRange, setTimeRange] = useState('Last 30 Days');
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [scoreTrend, setScoreTrend] = useState<ScoreTrendItem[]>([]);
+  const [radarData, setRadarData] = useState<RadarItem[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   // Streak state that can be incremented locally too
   const [streak, setStreak] = useState(0);
@@ -25,12 +26,14 @@ export const DashboardPage: React.FC = () => {
 
     async function loadData() {
       try {
-        const [statsData, trendData] = await Promise.all([
+        const [statsData, trendData, radarDataRes] = await Promise.all([
           api.getDashboardStats(),
-          api.getScoreTrend()
+          api.getScoreTrend(),
+          api.getRadarData()
         ]);
         setStats(statsData);
         setScoreTrend(trendData);
+        setRadarData(radarDataRes);
         if (statsData.streak !== undefined && statsData.streak !== null) {
           setStreak(statsData.streak);
         }
@@ -63,6 +66,15 @@ export const DashboardPage: React.FC = () => {
     recentSessions: [],
     dimensionAverages: { star: 0, techDepth: 0, comm: 0, relevance: 0, confidence: 0, conciseness: 0 }
   };
+
+  const activeRadar = radarData.length > 0 ? radarData : [
+    { subject: 'STAR Structure', current: 0, average: 0 },
+    { subject: 'Technical Depth', current: 0, average: 0 },
+    { subject: 'Communication', current: 0, average: 0 },
+    { subject: 'Relevance', current: 0, average: 0 },
+    { subject: 'Confidence', current: 0, average: 0 },
+    { subject: 'Conciseness', current: 0, average: 0 }
+  ];
 
   return (
     <div className="theme-celestial bg-background text-on-surface min-h-screen font-body relative overflow-x-hidden">
@@ -246,10 +258,10 @@ export const DashboardPage: React.FC = () => {
             </div>
 
             {/* Skill Radar Chart / Breakdown */}
-            <div className="bg-primary text-white p-6 rounded-2xl celestial-shadow flex flex-col justify-between">
+            <div className="bg-primary text-white p-6 rounded-2xl celestial-shadow flex flex-col justify-between h-full">
               <h4 className="font-bold text-lg">Skill Breakdown</h4>
-              <div className="flex-1 flex items-center justify-center py-4">
-                <div className="relative w-32 h-32">
+              <div className="flex-1 flex items-center justify-center py-2">
+                <div className="relative w-20 h-20">
                   <div className="absolute inset-0 border-4 border-white/10 rounded-full"></div>
                   <div className="absolute inset-0 border-4 border-white/20 rounded-full scale-75"></div>
                   <div className="absolute inset-0 border-4 border-white/30 rounded-full scale-50"></div>
@@ -260,29 +272,18 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <div>
-                  <div className="flex justify-between text-xs font-semibold mb-1">
-                    <span>Logic</span>
-                    <span className="text-success font-bold">
-                      {activeStats.dimensionAverages.relevance ? Math.round((activeStats.dimensionAverages.relevance / 15) * 100) : 92}%
-                    </span>
+              <div className="space-y-2 max-h-[170px] overflow-y-auto pr-1">
+                {activeRadar.map((item) => (
+                  <div key={item.subject}>
+                    <div className="flex justify-between text-xs font-semibold mb-0.5">
+                      <span>{item.subject}</span>
+                      <span className="text-success font-bold">{item.current}%</span>
+                    </div>
+                    <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-success h-full" style={{ width: `${item.current}%` }}></div>
+                    </div>
                   </div>
-                  <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-success h-full" style={{ width: `${activeStats.dimensionAverages.relevance ? Math.round((activeStats.dimensionAverages.relevance / 15) * 100) : 92}%` }}></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-xs font-semibold mb-1">
-                    <span>Delivery</span>
-                    <span className="text-success font-bold">
-                      {activeStats.dimensionAverages.comm ? Math.round((activeStats.dimensionAverages.comm / 20) * 100) : 74}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-success h-full" style={{ width: `${activeStats.dimensionAverages.comm ? Math.round((activeStats.dimensionAverages.comm / 20) * 100) : 74}%` }}></div>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>

@@ -440,12 +440,13 @@ export const SummaryPage: React.FC = () => {
       try {
         let targetId = sessionIdParam;
         if (!targetId) {
-          // Fallback to fetch dashboard stats and get the latest session ID
-          const stats = await api.getDashboardStats();
-          if (stats.recentSessions && stats.recentSessions.length > 0) {
-            targetId = stats.recentSessions[0].id;
-          } else {
-            targetId = localStorage.getItem('last_completed_session_id') || '';
+          targetId = localStorage.getItem('last_completed_session_id') || '';
+          if (!targetId) {
+            // Fallback to fetch dashboard stats and get the latest session ID
+            const stats = await api.getDashboardStats();
+            if (stats.recentSessions && stats.recentSessions.length > 0) {
+              targetId = stats.recentSessions[0].id;
+            }
           }
         }
 

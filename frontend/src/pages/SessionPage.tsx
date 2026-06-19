@@ -906,6 +906,19 @@ export const SessionPage: React.FC = () => {
     }
   };
 
+  const handleNavigation = async (path: string) => {
+    if (sessionStarted) {
+      const confirmEnd = confirm('You have an active interview session. Do you want to end it and compile your report before leaving? (OK to end and view report, Cancel to stay in the interview)');
+      if (confirmEnd) {
+        await handleForceEndSession();
+        return;
+      } else {
+        return;
+      }
+    }
+    navigate(path);
+  };
+
   const handleDoneSpeaking = () => {
     if (responseText.trim().length < 5 || isSubmitting) return;
     stopListening();
@@ -941,13 +954,13 @@ export const SessionPage: React.FC = () => {
       {/* TopAppBar */}
       <header className="bg-surface border-b border-outline-variant shadow-lg flex justify-between items-center px-6 py-4 w-full top-0 z-50 fixed">
         <div className="flex items-center gap-4">
-          <span onClick={() => navigate(api.getCurrentUser() ? '/dashboard' : '/')} className="text-2xl font-black text-primary tracking-tighter cursor-pointer">
+          <span onClick={() => handleNavigation(api.getCurrentUser() ? '/dashboard' : '/')} className="text-2xl font-black text-primary tracking-tighter cursor-pointer">
             TechPrep AI
           </span>
           <div className="hidden md:flex gap-6 ml-8 text-sm">
-            <button onClick={() => navigate('/dashboard')} className="text-on-surface-variant font-medium hover:text-primary transition-colors">Dashboard</button>
-            <button onClick={() => navigate('/session')} className="text-primary font-bold border-b-2 border-primary pb-1">Practice</button>
-            <button onClick={() => navigate('/history')} className="text-on-surface-variant font-medium hover:text-primary transition-colors">History</button>
+            <button onClick={() => handleNavigation('/dashboard')} className="text-on-surface-variant font-medium hover:text-primary transition-colors">Dashboard</button>
+            <button onClick={() => handleNavigation('/session')} className="text-primary font-bold border-b-2 border-primary pb-1">Practice</button>
+            <button onClick={() => handleNavigation('/history')} className="text-on-surface-variant font-medium hover:text-primary transition-colors">History</button>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -1540,13 +1553,25 @@ export const SessionPage: React.FC = () => {
                   )}
 
                   {/* Next Question button */}
-                  <button
-                    onClick={handleNextOrFinish}
-                    disabled={isSubmitting}
-                    className="w-full py-4 rounded-full bg-secondary text-white font-bold shadow-md hover:brightness-110 transition-all text-sm mt-auto"
-                  >
-                    {nextQuestionRef ? '→ Next Question' : '🏁 Finish & View Report'}
-                  </button>
+                  <div className="flex flex-col gap-2 mt-auto">
+                    <button
+                      onClick={handleNextOrFinish}
+                      disabled={isSubmitting}
+                      className="w-full py-4 rounded-full bg-secondary text-white font-bold shadow-md hover:brightness-110 transition-all text-sm"
+                    >
+                      {nextQuestionRef ? '→ Next Question' : '🏁 Finish & View Report'}
+                    </button>
+                    {nextQuestionRef && (
+                      <button
+                        onClick={() => { if (confirm('End this interview session? Your performance report will be compiled.')) handleForceEndSession(); }}
+                        disabled={isSubmitting}
+                        className="w-full py-2.5 rounded-full font-bold bg-error/10 text-error border border-error/20 hover:bg-error/20 transition-all text-xs flex items-center justify-center gap-1.5"
+                      >
+                        <span className="material-symbols-outlined text-xs">call_end</span>
+                        End Interview Early
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1606,7 +1631,7 @@ export const SessionPage: React.FC = () => {
 
       {/* Mobile bottom nav */}
       <nav className="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-3 md:hidden bg-surface shadow-lg rounded-t-xl border-t border-outline-variant">
-        <button onClick={() => navigate('/dashboard')} className="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+        <button onClick={() => handleNavigation('/dashboard')} className="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
           <span className="material-symbols-outlined">dashboard</span>
           <span className="text-[10px] font-bold">Home</span>
         </button>
@@ -1620,7 +1645,7 @@ export const SessionPage: React.FC = () => {
             <span className="text-[10px] font-bold">Done</span>
           </button>
         )}
-        <button onClick={() => navigate('/history')} className="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+        <button onClick={() => handleNavigation('/history')} className="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
           <span className="material-symbols-outlined">history</span>
           <span className="text-[10px] font-bold">History</span>
         </button>

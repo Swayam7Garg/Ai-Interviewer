@@ -10,16 +10,36 @@ export const HistoryPage: React.FC = () => {
   const isDark = theme === 'dark';
   const [selectedRole, setSelectedRole] = useState('All Roles');
   const [selectedType, setSelectedType] = useState('All Types');
-
   const [sessions, setSessions] = useState<any[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Fetch unique roles on mount to populate the dropdown
+  useEffect(() => {
+    const fetchAllRoles = async () => {
+      try {
+        const res = await api.getHistory();
+        const roles = Array.from(new Set((res.sessions || []).map(s => s.role)));
+        setAvailableRoles(roles);
+      } catch (err) {
+        console.error('Failed to fetch roles for dropdown', err);
+      }
+    };
+    fetchAllRoles();
+  }, []);
+
+  // Fetch sessions history based on filters
   useEffect(() => {
     const fetchHistory = async () => {
       setLoading(true);
       try {
-        const stats = await api.getDashboardStats();
-        setSessions(stats.recentSessions || []);
+        const res = await api.getHistory(selectedRole, selectedType);
+        // Map interviewType to type for compatibility
+        const mappedSessions = (res.sessions || []).map(s => ({
+          ...s,
+          type: s.interviewType
+        }));
+        setSessions(mappedSessions);
       } catch (err) {
         console.error('Failed to fetch session history', err);
       } finally {
@@ -27,22 +47,26 @@ export const HistoryPage: React.FC = () => {
       }
     };
     fetchHistory();
-  }, []);
+  }, [selectedRole, selectedType]);
 
-  // Filter logic
-  const filteredSessions = sessions.filter(session => {
-    const roleMatch = selectedRole === 'All Roles' || 
-      session.role.toLowerCase().includes(selectedRole.toLowerCase());
-    
-    // session has type (if returned or hardcoded fallback)
-    const typeMatch = selectedType === 'All Types' || 
-      (session.type && session.type.toLowerCase().includes(selectedType.toLowerCase()));
-
-    return roleMatch && typeMatch;
-  });
+  const filteredSessions = sessions;
 
   const handleExport = () => {
     alert('Exporting feedback history data to CSV...');
+  };
+
+  const handleDownloadPDF = async (sessionId: string) => {
+    try {
+      const status = await api.getReportStatus(sessionId);
+      if (status.ready && status.url) {
+        window.open(status.url, '_blank');
+      } else {
+        alert('⏳ The PDF report is still being compiled. Please try again in a few seconds.');
+      }
+    } catch (err) {
+      console.error('Failed to check report status', err);
+      alert('Failed to retrieve PDF report. Please try again.');
+    }
   };
 
   if (loading) {
@@ -112,10 +136,12 @@ export const HistoryPage: React.FC = () => {
               value={selectedRole}
               onChange={(e) => setSelectedRole(e.target.value)}
             >
-              <option className="bg-surface text-on-surface">All Roles</option>
-              <option className="bg-surface text-on-surface">Senior Frontend Engineer</option>
-              <option className="bg-surface text-on-surface">Product Manager</option>
-              <option className="bg-surface text-on-surface">SDE II</option>
+              <option className="bg-surface text-on-surface" value="All Roles">All Roles</option>
+              {availableRoles.map(role => (
+                <option key={role} className="bg-surface text-on-surface" value={role}>
+                  {role}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -175,8 +201,9 @@ export const HistoryPage: React.FC = () => {
                   View Report
                 </button>
                 <button 
-                  onClick={() => alert(`Downloading report PDF for session...`)}
+                  onClick={() => handleDownloadPDF(session.id)}
                   className="w-12 h-10 border border-outline-variant text-on-surface-variant rounded-full flex items-center justify-center hover:bg-surface-container transition-colors"
+                  title="Download Report PDF"
                 >
                   <span className="material-symbols-outlined text-sm">download</span>
                 </button>
